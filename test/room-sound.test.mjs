@@ -22,8 +22,10 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   const messages=[{role:'assistant',text:'昔の会話'}];
   const state={connected:true,gatewayReady:true,selected:'one',messages,runId:null,stream:''};
   room.update(state);ticks(20);assert.equal(notes,0,'history stays silent');
-  messages.push({role:'user',text:'こんにちは'});room.update({...state,runId:'run'});ticks(20);assert.equal(notes,0,'user text and thinking stay silent');
-  room.update({...state,runId:'run',stream:'あい'});ticks(1);assert.equal(get('room-text').textContent,'あ');assert.equal(notes,1);
+  messages.push({role:'user',text:'こんにちは'});room.update({...state,runId:'run'});
+  assert.equal(get('room-text').textContent,'こんにちは','sent message appears immediately');assert.equal(get('room-speaker').textContent,'あなた');assert.equal(get('room-thinking').hidden,false);
+  ticks(20);assert.equal(notes,0,'user text and thinking stay silent');
+  room.update({...state,runId:'run',stream:'あい'});assert.equal(get('room-thinking').hidden,true);assert.equal(get('room-speaker').textContent,'ゴンタ');ticks(1);assert.equal(get('room-text').textContent,'あ');assert.equal(notes,1);
   room.update({...state,runId:'run',stream:'あいうえ'});ticks(3);assert.equal(notes,4,'appending a stream does not replay characters');
   room.update({...state,runId:'run',stream:'あいうえ'});ticks(5);assert.equal(notes,4,'unchanged refresh is silent');
   messages.push({role:'assistant',text:'あいうえ'});room.update(state);ticks(5);assert.equal(notes,4,'final copy of streamed text is silent');
