@@ -3,6 +3,11 @@ const $=id=>document.getElementById(id);
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
 const room=createRoom();
 function updateRoom(){room.update({connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
+const clockDate=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
+const clockTime=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+function updateClocks(){const now=new Date();for(const clock of document.querySelectorAll('[data-clock]')){clock.dateTime=now.toISOString();clock.textContent=`${clockDate.format(now)} ${clockTime.format(now)}`;}}
+updateClocks();setInterval(updateClocks,1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateClocks();});
 const pending=new Map();
 const saved=JSON.parse(sessionStorage.getItem('gonta.connection')||'null');
 let credentials=saved;

@@ -22,3 +22,11 @@
 @media(max-width:760px){.room-toggle{font-size:10px;padding:8px}.pixel-room{padding:15px 13px}.room-scene{max-height:300px}.room-topline{font-size:10px;letter-spacing:0}.room-topline strong{font-size:13px}.room-dialogue{padding:12px;min-height:135px}.room-text{font-size:16px;max-height:155px}.room-controls{gap:7px}.room-controls button{padding:5px 7px}.room-location{top:8px;left:8px;font-size:10px}.room-bubble{font-size:16px;min-width:32px}.room-mode .footer-note{display:none}}
 @media(max-width:420px){header{padding:0 10px}.heading-left{margin-right:7px;gap:6px}.header-actions{gap:5px}.room-toggle{font-size:9px;padding:8px 6px}.room-topline{align-items:flex-start;flex-direction:column;gap:3px}}
 @media(prefers-reduced-motion:reduce){.room-gonta,.pixel-room.is-thinking .room-gonta,.pixel-room.is-talking .room-gonta{animation:none}}
+
+.clock-bar{display:flex;justify-content:flex-end;flex-shrink:0;padding:7px 28px;border-bottom:1px solid var(--border);color:var(--muted);background:var(--soft)}
+.app-clock{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.room-mode .clock-bar{display:none}
+.room-clock{position:absolute;z-index:2;top:12px;right:12px;background:#17221ce8;padding:6px 10px;border:2px solid #aea680;font-family:GontaPixel,monospace;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;color:#f4e9cb}
+.room-location{max-width:calc(100% - 245px)}
+@media(max-width:760px){.clock-bar{padding:6px 20px}.room-clock{top:8px;right:8px;font-size:11px;padding:5px 7px}.room-location{max-width:calc(100% - 218px)}}
+@media(max-width:420px){.room-clock{top:auto;bottom:8px;font-size:10px}.room-location{max-width:calc(100% - 16px)}}
