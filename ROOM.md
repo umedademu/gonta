@@ -9,7 +9,7 @@
 - `public/room.css`：キャラの位置・サイズ・揺れ方・RPG風会話枠。
 - `public/room.js`：表示モード・会話表示・文字送り。送信処理は既存の`public/app.js`を共用します。
 
-同名PNGを差し替えてGitHubへ反映すると、Vercelが再公開します。スプライトシートに変える場合はCSS/JSも調整してください。現状の動きは1枚絵の上下動・傾きです。口パクや歩行のアニメーションはまだありません。
+同名PNGを差し替えてGitHubへ反映すると、Vercelが再公開します。スプライトシートに変える場合はCSS/JSも調整してください。通常姿は1枚絵の上下動・傾き、作業姿は下記の横2コマのスプライトです。口パクや歩行のアニメーションはまだありません。
 
 日本語ドット文字には[DotGothic16](https://github.com/fontworks-fonts/DotGothic16)を同梱しています。ライセンスは`public/DotGothic16-OFL.txt`です。
 
@@ -24,3 +24,20 @@ Use case: stylized-concept. Asset type: background for a cozy retro Japanese RPG
 ### ゴンタの最終プロンプト
 
 Use case: stylized-concept. Input image is character reference only. Create a single full-body sitting dog game sprite on a truly transparent background. Same black dog with bright green square glasses, white muzzle and chest, brown eyes and upright rounded ears as reference. Cute calm friendly chibi proportions, facing viewer, front paws visible, tail curled to the side. Low resolution 8-bit NES RPG pixel art, large sharp blocky pixels, limited palette, no smooth edges or gradients. Center the whole dog in frame, modest transparent margin, no room, no floor, no cast shadow, no text, only one pose, not a sprite sheet.
+# 作業用スプライト（2026-09-06）
+
+内蔵画像生成ツールで作成。`public/room-work-pc.png` は右上のPCへ向いた背面姿、`public/room-work-obsidian.png` は左の本棚へ向いた背面姿。各PNGは透明背景・横2コマ（等幅の正方形セル）で、CSSが0.65秒周期で切り替える。Geminiで差し替える場合も同じ配置・足の基準位置・透明背景を維持する。
+
+送信文のパス／調べもの表現から先行表示し、実際のツールイベントが届いたらそちらを優先する。ObsidianとPC処理が並行する間はObsidianを優先。終了・切断時は通常姿に戻る。動きを減らす設定では静止画。
+
+生成プロンプト:
+
++### pc
+
+Use case: stylized-concept. Game pixel sprite sheet on genuinely transparent background. Reference 1 is the identity of Gonta: black dog, green square glasses, white paw tips, rounded ears, white tail tip. Reference 2 gives room perspective only, do not draw the room or furniture. Draw exactly TWO animation frames side by side in a 2:1 canvas, each in an equal square cell, aligned same scale and foot baseline, full body with small padding. Crisp chunky NES-style pixels, no labels, no text, no shadows outside character. Gonta is seen from BEHIND in three-quarter rear view facing UPPER RIGHT, standing and leaning forward to use the existing desk PC. Show the back of his head and ears, tiny green glasses side arm only, muzzle aimed away to upper right. Both front paws extended to upper-right keyboard height. Frame 1 left paw raised and right paw lower, frame 2 right paw raised and left paw lower, typing/rummaging animated. No front-facing eyes. No computer or chair drawn.
+
+
+### obsidian
+
+Use case: stylized-concept. Game pixel sprite sheet on genuinely transparent background. Reference 1 is the identity of Gonta: black dog, green square glasses, white paw tips, rounded ears, white tail tip. Reference 2 gives room perspective only, do not draw the room or furniture. Draw exactly TWO animation frames side by side in a 2:1 canvas, each in an equal square cell, aligned same scale and foot baseline, full body with small padding. Crisp chunky NES-style pixels, no labels, no text, no shadows outside character. Gonta is seen from BEHIND in three-quarter rear view facing UPPER LEFT toward the existing bookshelf. Show back of head and ears, green glasses side arm only. Standing reaching into shelf and pulling a purple notebook with cream pages. Frame 1 paw reaching upward with notebook close to body, frame 2 looking down toward open notebook in paws, back still toward viewer. Same head position and body scale, distinct paw and page movement. No front-facing eyes. No shelf drawn.
+
