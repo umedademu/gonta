@@ -6,7 +6,7 @@ test('room sound follows newly revealed reply characters, never thinking or hist
  const names=['document','window','localStorage','matchMedia','setInterval','clearInterval'];
  const originals=new Map(names.map(n=>[n,Object.getOwnPropertyDescriptor(globalThis,n)]));
  const elements=new Map(),listeners=new Map(),intervals=new Map(),storage=new Map([['gonta.view','room']]);let sequence=0,notes=0;
- const element=()=>({textContent:'',hidden:false,classList:{toggle(){}},setAttribute(){},append(){},querySelector(){return element();}});
+ const element=()=>{const classes=new Set();return{textContent:'',hidden:false,classes,classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}},setAttribute(){},append(){},querySelector(){return element();}};};
  const get=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
  const ticks=n=>{for(let i=0;i<n;i++)for(const cb of [...intervals.values()])cb();};
  const param={setValueAtTime(){},linearRampToValueAtTime(){}};
@@ -36,5 +36,11 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   messages.push({role:'assistant',text:'新しい返答'});room.update(state);ticks(1);assert.equal(notes,5);
   get('room-reveal').onclick();ticks(20);assert.equal(notes,5,'show all cancels remaining notes');
   messages.push({role:'assistant',text:'最後の返答'});room.update(state);get('room-history').onclick();ticks(20);assert.equal(notes,5,'normal mode is silent');
+  messages.push({role:'user',text:'Obsidianの日記を調べて'});room.update({...state,runId:'lookup'});
+  assert.ok(get('pixel-room').classes.has('is-searching'));assert.equal(get('room-text').textContent,'Obsidianの日記を調べて');
+  room.update({...state,runId:'lookup',activity:{kind:'obsidian'},stream:'調べています'});
+  assert.ok(get('pixel-room').classes.has('is-searching'));assert.equal(get('room-thinking').textContent,'Obsidianのノートを調べています…');
+  room.update({...state,runId:'lookup',activity:null,stream:'読み終わりました'});assert.equal(get('pixel-room').classes.has('is-searching'),false);
+  room.update({...state,connected:false,activity:{kind:'obsidian'}});assert.equal(get('pixel-room').classes.has('is-searching'),false);
  }finally{for(const [name,descriptor]of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });
