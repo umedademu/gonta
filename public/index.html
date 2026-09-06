@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f5ef"><meta name="description" content="いつもの会話を、どこからでも。GontaはOpenClawの会話をWebとLINEにつなぎます。"><title>Gonta — 会話のつづき</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f5ef"><meta name="description" content="いつもの会話を、どこからでも。GontaはOpenClawの会話をWebとLINEにつなぎます。"><title>Gonta — 会話のつづき</title><link rel="icon" href="/gonta-profile.png"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
 <body>
  <div class="app">
   <aside class="sidebar" id="sidebar">
-   <a class="brand" href="/" aria-label="Gonta ホーム"><img src="/icon.svg" alt="" width="38" height="38"><span>gonta<span class="brand-dot">.</span></span></a>
+   <a class="brand" href="/" aria-label="Gonta ホーム"><img src="/gonta-profile.png" alt="" width="38" height="38"><span>gonta<span class="brand-dot">.</span></span></a>
    <div class="sidebar-caption">YOUR CONVERSATIONS</div>
    <button class="new-chat" id="new-chat"><span>＋</span> 新しい会話</button>
    <label class="search"><span>⌕</span><input id="search" placeholder="会話を探す" aria-label="会話を検索"></label>
@@ -13,7 +13,7 @@
   <div class="main">
    <header><div class="heading-left"><button class="mobile-menu" id="menu-toggle" aria-label="会話一覧を開く">☰</button><span id="conversation-title">会話のつづき</span><span class="version">OPENCLAW</span></div><button id="connection-pill" class="connection-pill"><i></i><span id="connection-label">未接続</span></button></header>
    <main id="chat" tabindex="-1">
-    <section class="welcome" id="welcome"><div class="eyebrow"><span></span> ONE CONVERSATION, EVERYWHERE</div><h1>いつもの会話を、<br><span>どこからでも。</span></h1><p class="intro">Discordで始めた話のつづきを、WebでもLINEでも。<br>あなたのOpenClawと、ひとつながりの会話を。</p><div class="channel-path"><span class="channel discord">◉ <b>Discord</b></span><span class="path-line"></span><img src="/icon.svg" width="42" height="42" alt="Gonta"><span class="path-line"></span><span class="channel web">▤ <b>Web</b></span><span class="channel line">▣ <b>LINE</b></span></div><div class="welcome-cards"><button id="welcome-connect"><span class="card-top">01 <span>↗</span></span><strong>PCにつなぐ</strong><p>接続先とアクセスキーを入力して、<br>OpenClawの会話を開く。</p></button><button id="welcome-line"><span class="card-top">02 <span>↗</span></span><strong>LINEで続きを話す</strong><p>会話を選んで連携すると、<br>外出先でもそのまま続けられます。</p></button></div><div class="privacy-note">⌑ 履歴はPCのOpenClawで管理されます</div></section>
+    <section class="welcome" id="welcome"><div class="eyebrow"><span></span> ONE CONVERSATION, EVERYWHERE</div><h1>いつもの会話を、<br><span>どこからでも。</span></h1><p class="intro">Discordで始めた話のつづきを、WebでもLINEでも。<br>あなたのOpenClawと、ひとつながりの会話を。</p><div class="channel-path"><span class="channel discord">◉ <b>Discord</b></span><span class="path-line"></span><img src="/gonta-profile.png" width="42" height="42" alt="Gonta"><span class="path-line"></span><span class="channel web">▤ <b>Web</b></span><span class="channel line">▣ <b>LINE</b></span></div><div class="welcome-cards"><button id="welcome-connect"><span class="card-top">01 <span>↗</span></span><strong>PCにつなぐ</strong><p>接続先とアクセスキーを入力して、<br>OpenClawの会話を開く。</p></button><button id="welcome-line"><span class="card-top">02 <span>↗</span></span><strong>LINEで続きを話す</strong><p>会話を選んで連携すると、<br>外出先でもそのまま続けられます。</p></button></div><div class="privacy-note">⌑ 履歴はPCのOpenClawで管理されます</div></section>
     <div class="messages" id="messages" aria-live="polite" aria-label="会話の内容"></div>
    </main>
    <div id="notice" class="notice" role="status" hidden></div>
