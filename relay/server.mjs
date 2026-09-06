@@ -1,3 +1,4 @@
+import {ActivityTracker} from './activity.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
@@ -18,6 +19,7 @@ const config=JSON.parse(readFileSync(configFile));
 if(!config.passcode||config.passcode.length<24)throw Error('A passcode of at least 24 characters is required.');
 const oc=JSON.parse(readFileSync(process.env.OPENCLAW_CONFIG||path.join(os.homedir(),'.openclaw/openclaw.json')));
 const gateway=new Gateway({url:`ws://127.0.0.1:${oc.gateway.port||18789}`,token:oc.gateway.auth.token,directory});
+const activities=new ActivityTracker();
 const store=new Store(path.join(directory,'gonta.sqlite'));
 try{chmodSync(path.join(directory,'gonta.sqlite'),0o600);}catch{}
 const port=Number(process.env.PORT||18890),peers=new Set();
@@ -27,7 +29,7 @@ function limit(key,max,window=60000){const now=Date.now();let r=limiters.get(key
 setInterval(()=>{for(const[k,v]of limiters)if(v.until<Date.now())limiters.delete(k);},60000).unref();
 const send=(ws,obj)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj));};
 async function sessions(){const r=await gateway.request('sessions.list',{limit:200});return(r.sessions||[]).filter(x=>allowedSession(x.key)).map(x=>({key:x.key,name:x.label||x.displayName|| (x.key.endsWith(':main')?'メインの会話':'新しい会話'),channel:x.channel||'web',updatedAt:x.updatedAt,hasActiveRun:x.hasActiveRun}));}
-async function history(key){if(!allowedSession(key))throw Error('この会話にはアクセスできません。');const r=await gateway.request('chat.history',{sessionKey:key,limit:100});return{messages:(r.messages||[]).filter(m=>['user','assistant'].includes(m.role)).map(m=>({id:m.id||m.messageId,role:m.role,text:textContent(m),timestamp:m.timestamp})).filter(m=>m.text),sessionInfo:r.sessionInfo,inFlightRun:r.inFlightRun?{runId:r.inFlightRun.runId,text:r.inFlightRun.text}:null};}
+async function history(key){if(!allowedSession(key))throw Error('この会話にはアクセスできません。');const r=await gateway.request('chat.history',{sessionKey:key,limit:100});return{activity:activities.get(key),messages:(r.messages||[]).filter(m=>['user','assistant'].includes(m.role)).map(m=>({id:m.id||m.messageId,role:m.role,text:textContent(m),timestamp:m.timestamp})).filter(m=>m.text),sessionInfo:r.sessionInfo,inFlightRun:r.inFlightRun?{runId:r.inFlightRun.runId,text:r.inFlightRun.text}:null};}
 function info(){return{gateway:gateway.ready,version:gateway.version,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts()};}
 async function rpc(ws,method,p){
  switch(method){
@@ -96,6 +98,7 @@ wss.on('connection',(ws,req)=>{
 });
 gateway.on('event',frame=>{
  const p=frame.payload;
+ const change=activities.event(frame);if(change)for(const ws of peers)if(ws.session===change.sessionKey)send(ws,{type:'activity',...change});
  if(frame.event==='chat'&&allowedSession(p?.sessionKey))for(const ws of peers)if(ws.session===p.sessionKey)send(ws,{type:'chat',sessionKey:p.sessionKey,runId:p.runId,state:p.state,text:textContent(p.message),error:p.errorMessage});
 });
 gateway.on('ready',()=>{console.log('OpenClaw connected');for(const ws of peers)send(ws,{type:'status',status:info()});void drain();});

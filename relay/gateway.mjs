@@ -28,7 +28,7 @@ export class Gateway extends EventEmitter {
         const scopes=['operator.read','operator.write'];
         const proof=['v3',this.identity.id,'cli','cli','operator',scopes.join(','),String(ts),this.token,nonce,'linux',''].join('|');
         try {
-          const hello=await this.request('connect',{minProtocol:4,maxProtocol:4,client:{id:'cli',displayName:'Gonta Bridge',version:'1.0.0',platform:'linux',mode:'cli'},role:'operator',scopes,caps:[],auth:{token:this.token},device:{id:this.identity.id,publicKey:this.identity.publicKey,signature:sign(null,Buffer.from(proof),this.identity.privateKey).toString('base64url'),signedAt:ts,nonce}},true);
+          const hello=await this.request('connect',{minProtocol:4,maxProtocol:4,client:{id:'cli',displayName:'Gonta Bridge',version:'1.0.0',platform:'linux',mode:'cli'},role:'operator',scopes,caps:["tool-events"],auth:{token:this.token},device:{id:this.identity.id,publicKey:this.identity.publicKey,signature:sign(null,Buffer.from(proof),this.identity.privateKey).toString('base64url'),signedAt:ts,nonce}},true);
           clearTimeout(timer);this.ready=true;this.version=hello.server.version;this.emit('ready');
         } catch(e) {this.emit('diagnostic',e.message);ws.close();}
       } else if(frame.type==='res') {
