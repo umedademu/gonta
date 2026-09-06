@@ -3,3 +3,35 @@
 
 
 .brand img,.channel-path img,.avatar img{object-fit:cover;border-radius:50%}
+
+/* Theme controls remain accessible in the mobile header. */
+:root{color-scheme:light}
+.header-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.heading-left{flex:1;margin-right:12px;overflow:hidden}
+.theme-toggle{display:grid;place-items:center;width:38px;height:38px;flex-shrink:0;border:1px solid var(--border);border-radius:50%;font-size:22px;line-height:1;color:var(--green)}
+.theme-toggle:hover{background:var(--soft)}
+:root[data-theme="dark"]{color-scheme:dark;color:#e2eae2;background:#141b18;--green:#a9c995;--muted:#a7b2a3;--border:#344339;--soft:#253129}
+[data-theme="dark"] .sidebar{background:#1b251f;border-color:var(--border);box-shadow:none}
+[data-theme="dark"] .sidebar-bottom{border-color:var(--border)}
+[data-theme="dark"] .session:hover,[data-theme="dark"] .welcome-cards button:hover{background:#2a382e}
+[data-theme="dark"] .session.active{background:#344735}
+[data-theme="dark"] .welcome-cards button,[data-theme="dark"] #composer,[data-theme="dark"] dialog{background:#1c2720;border-color:var(--border);color:#e2eae2;box-shadow:none}
+[data-theme="dark"] dialog::backdrop{background:#030906b3}
+[data-theme="dark"] dialog input{background:#141d17;border-color:#435445;color:#e2eae2}
+[data-theme="dark"] dialog input:focus{border-color:#a9c995}
+[data-theme="dark"] textarea,[data-theme="dark"] .search input{color:#e2eae2}
+[data-theme="dark"] textarea::placeholder,[data-theme="dark"] input::placeholder{color:#a7b2a3}
+[data-theme="dark"] .new-chat,[data-theme="dark"] .primary,[data-theme="dark"] #send{background:#a9c995;color:#162315}
+[data-theme="dark"] .message.user .message-text,[data-theme="dark"] .code-row{background:#2b3b2e}
+[data-theme="dark"] .message pre{background:#111a14;border-color:var(--border);color:#dce8d8}
+[data-theme="dark"] .avatar,[data-theme="dark"] .message.user .avatar,[data-theme="dark"] .version{background:#2b372d;color:#b4c3ac}
+[data-theme="dark"] .line-add,[data-theme="dark"] .line-icon{background:#2e452e;color:#b6d9a2}
+[data-theme="dark"] .notice{background:#382f20;border-color:#615036;color:#e6c38a}
+[data-theme="dark"] #connect-error{color:#efb393}
+[data-theme="dark"] .connection-pill{border-color:#435445;color:#b5c0ae}
+[data-theme="dark"] .connected .connection-pill{color:#b1d79c}
+[data-theme="dark"] h1>span,[data-theme="dark"] .brand-dot,[data-theme="dark"] .eyebrow,[data-theme="dark"] .line{color:#afcd98}
+[data-theme="dark"] .discord{color:#b9b3e3}
+[data-theme="dark"] .sidebar-caption,[data-theme="dark"] .sidebar-empty,[data-theme="dark"] .session small,[data-theme="dark"] .local-note,[data-theme="dark"] .arrow,[data-theme="dark"] .settings-icon,[data-theme="dark"] .intro,[data-theme="dark"] .web,[data-theme="dark"] .card-top,[data-theme="dark"] .welcome-cards p,[data-theme="dark"] .privacy-note,[data-theme="dark"] .composer-bottom>span,[data-theme="dark"] .footer-note,[data-theme="dark"] .message-author,[data-theme="dark"] .message-author time,[data-theme="dark"] .thinking,[data-theme="dark"] .empty-chat,[data-theme="dark"] .dialog-description,[data-theme="dark"] dialog label,[data-theme="dark"] .field-note,[data-theme="dark"] .disconnect,[data-theme="dark"] .line-help,[data-theme="dark"] #pair-box>p,[data-theme="dark"] .close,[data-theme="dark"] #stop,[data-theme="dark"] .mobile-menu{color:#adbca5}
+[data-theme="dark"] .path-line{background:#43533d}
+@media(max-width:760px){.header-actions{gap:7px}.theme-toggle{width:36px;height:36px;font-size:20px}}
