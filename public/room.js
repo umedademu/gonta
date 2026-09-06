@@ -35,12 +35,14 @@ export function createRoom(){
   const latest=position===entries.length-1;
   const waiting=online&&state.runId&&latest;
   root.classList.toggle('is-thinking',!!waiting&&!state.stream);root.classList.toggle('is-talking',!!waiting&&!!state.stream);
-  $('room-status').textContent=!online?'接続を待っています':waiting?'ゴンタが考えています…':'ゴンタは ここにいます';
+  $('room-status').textContent=!online?'接続を待っています':'ゴンタは ここにいます';
   $('room-bubble').textContent=waiting?(state.stream?'！':'…'):'♪';
   $('room-context').textContent=state.sessionName||'会話のつづき';
   const entry=entries[position];
-  const text=!online?'おかえり。まずは右上の接続ボタンから、PCにつないでね。':!state.selected?'会話を選ぶと、ここで続きを話せるよ。':waiting?(state.stream||'うーん、ちょっと考えているよ…'):entry?.text||'おかえり！ 今日はどんな話をしようか。下の入力欄から話しかけてね。';
-  $('room-speaker').textContent=entry?.role==='user'&&!waiting?'あなた':'ゴンタ';
+  const replying=!!waiting&&!!state.stream;
+  const text=!online?'おかえり。まずは右上の接続ボタンから、PCにつないでね。':!state.selected?'会話を選ぶと、ここで続きを話せるよ。':replying?state.stream:entry?.text||'おかえり！ 今日はどんな話をしようか。下の入力欄から話しかけてね。';
+  $('room-speaker').textContent=entry?.role==='user'&&!replying?'あなた':'ゴンタ';
+  $('room-thinking').hidden=!waiting||replying;
   $('room-count').textContent=entries.length?`${position+1} / ${entries.length}`:'新しい会話';
   $('room-prev').disabled=position<=0;$('room-next').disabled=position>=entries.length-1;
   write(text,!!online&&!!latest&&((!!waiting&&!!state.stream)||(animate&&entry?.role==='assistant')));$('room-dialogue').setAttribute('aria-busy',String(!!waiting));
@@ -49,7 +51,8 @@ export function createRoom(){
   const oldCount=entries.length,following=position===oldCount-1;
   const changedSession=next.selected!==lastSession;
   state=next;entries=[...(next.messages||[])];lastSession=next.selected;
-  if(changedSession||following)position=entries.length-1;else position=Math.min(position,entries.length-1);
+  const justSent=next.runId&&entries.length>oldCount&&entries.at(-1)?.role==='user';
+  if(changedSession||following||justSent)position=entries.length-1;else position=Math.min(position,entries.length-1);
   // Unchanged history refreshes must not restart the text animation.
   paint(!changedSession&&entries.length>oldCount);
  }
