@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ActivityTracker} from '../relay/activity.mjs';
+import {ActivityTracker,activityKind} from '../relay/activity.mjs';
 test('Obsidian activity is isolated, redacted, and lasts until every tool finishes',()=>{
  const tracker=new ActivityTracker(),sessionKey='agent:main:discord:channel:123';
  const event=(phase,id,args,session=sessionKey)=>({event:'agent',payload:{sessionKey:session,runId:'run',stream:'tool',data:{phase,toolCallId:id,name:'read',args}}});
- assert.equal(tracker.event(event('start','a',{path:'/private/other.md'})),null);
+ assert.equal(tracker.event(event('start','a',{path:'/private/other.md'})).activity.kind,'pc');
  assert.equal(tracker.event(event('start','x',{path:'/obsidian/secret.md'},'agent:main:cron:secret')),null);
  const result=tracker.event(event('start','a',{path:'/private/obsidian/secret.md'}));
  assert.deepEqual(result,{sessionKey,activity:{kind:'obsidian',runId:'run'}});
@@ -14,4 +14,16 @@ test('Obsidian activity is isolated, redacted, and lasts until every tool finish
  assert.deepEqual(tracker.event(event('result','b')),{sessionKey,activity:null});
  tracker.event(event('start','c',{path:'/obsidian/note.md'}));
  tracker.event({event:'chat',payload:{sessionKey,runId:'run',state:'aborted'}});assert.equal(tracker.get(sessionKey),null);
+});
+test('PC inspection classification and overlapping work',()=>{
+ assert.equal(activityKind({name:'exec',args:{command:'ls ./public'}}),'pc');
+ assert.equal(activityKind({name:'read',args:{path:'C:\\Users\\USER\\Desktop\\W-History\\README.md'}}),'pc');
+ assert.equal(activityKind({name:'web_search',args:{query:'PC ファイル'}}),null);
+ assert.equal(activityKind({name:'exec',args:{command:'echo hello'}}),null);
+ const tracker=new ActivityTracker(),sessionKey='agent:main:discord:channel:123';
+ const event=(phase,id,path)=>tracker.event({event:'agent',payload:{sessionKey,runId:'r',stream:'tool',data:{phase,toolCallId:id,name:'read',args:{path}}}});
+ event('start','pc','/tmp/readme');event('start','note','/obsidian/note');
+ assert.equal(tracker.get(sessionKey).kind,'obsidian');
+ assert.equal(event('result','note').activity.kind,'pc');
+ assert.equal(event('error','pc').activity,null);
 });

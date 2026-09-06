@@ -42,5 +42,12 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   assert.ok(get('pixel-room').classes.has('is-searching'));assert.equal(get('room-thinking').textContent,'Obsidianのノートを調べています…');
   room.update({...state,runId:'lookup',activity:null,stream:'読み終わりました'});assert.equal(get('pixel-room').classes.has('is-searching'),false);
   room.update({...state,connected:false,activity:{kind:'obsidian'}});assert.equal(get('pixel-room').classes.has('is-searching'),false);
+  messages.push({role:'user',text:'この内容はどう思いますか？ C:\\Users\\USER\\Desktop\\W-History'});
+  room.update({...state,runId:'files'});assert.ok(get('pixel-room').classes.has('is-pc-working'));
+  assert.equal(get('room-text').textContent,messages.at(-1).text);
+  room.update({...state,runId:'files',stream:'確認します',activity:{kind:'pc'}});assert.ok(get('pixel-room').classes.has('is-pc-working'));
+  assert.equal(get('room-thinking').hidden,false);
+  room.update({...state,runId:'files',activity:{kind:'obsidian'}});assert.ok(get('pixel-room').classes.has('is-searching'));assert.equal(get('pixel-room').classes.has('is-pc-working'),false);
+  room.update({...state,runId:null});assert.equal(get('pixel-room').classes.has('is-pc-working'),false);assert.equal(get('pixel-room').classes.has('is-searching'),false);
  }finally{for(const [name,descriptor]of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });
