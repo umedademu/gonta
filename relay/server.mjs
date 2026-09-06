@@ -62,9 +62,9 @@ const server=http.createServer(async(req,res)=>{
   json(res,200,{ok:true});void drain();return;
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed'});
- const files={'/':'index.html','/app.js':'app.js','/theme.js':'theme.js','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
+ const files={'/':'index.html','/app.js':'app.js','/theme.js':'theme.js','/room.js':'room.js','/room.css':'room.css','/room-background.png':'room-background.png','/room-gonta.png':'room-gonta.png','/DotGothic16-Regular.ttf':'DotGothic16-Regular.ttf','/DotGothic16-OFL.txt':'DotGothic16-OFL.txt','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
  const file=files[url.pathname];if(!file)return json(res,404,{error:'Not found'});
- const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'};
+ const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
  res.writeHead(200,{'Content-Type':types[path.extname(file)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss: ws://127.0.0.1:* ws://localhost:*; base-uri 'none'; frame-ancestors 'none'"});res.end(req.method==='HEAD'?'':readFileSync(path.join(root,'public',file)));
  }catch{if(!res.headersSent)json(res,500,{error:'Request failed'});else res.end();}
 });
