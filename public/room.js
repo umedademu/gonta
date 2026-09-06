@@ -6,6 +6,7 @@ export function createRoom(){
  try{soundOn=localStorage.getItem('gonta.roomSound')!=='off';}catch{}
  const soundButton=document.createElement('button');soundButton.id='room-sound';soundButton.type='button';
  root.querySelector('.room-topline').append(soundButton);
+ const notebook=document.createElement('div');notebook.className='room-notebook';notebook.setAttribute('aria-hidden','true');notebook.innerHTML='<span class="notebook-pages"></span><span class="notebook-label">OBSIDIAN</span>';root.querySelector('.room-scene').append(notebook);
  function soundLabel(){soundButton.textContent=soundOn?'音 ON':'音 OFF';soundButton.setAttribute('aria-label','文字送りの効果音');soundButton.setAttribute('aria-pressed',String(soundOn));}
  function unlock(){if(!active||!soundOn)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')void audio.resume().catch(()=>{});}catch{}}
  // Browsers require a user gesture before audio can start.
@@ -34,15 +35,22 @@ export function createRoom(){
   const online=state.connected&&state.gatewayReady;
   const latest=position===entries.length-1;
   const waiting=online&&state.runId&&latest;
+  const request=entries.findLast(message=>message.role==='user')?.text||'';
+  const requestedSearch=/obsidian|オブシディアン/i.test(request)||(/日記|ノート|メモ/.test(request)&&/調べ|探|検索|読み|読ん|言及|見て|確認/.test(request));
+  const toolSearch=!!waiting&&state.activity?.kind==='obsidian';
+  const searchHint=!!waiting&&!state.stream&&requestedSearch;
+  const searching=toolSearch||searchHint;
+  root.classList.toggle('is-searching',searching);
   root.classList.toggle('is-thinking',!!waiting&&!state.stream);root.classList.toggle('is-talking',!!waiting&&!!state.stream);
   $('room-status').textContent=!online?'接続を待っています':'ゴンタは ここにいます';
-  $('room-bubble').textContent=waiting?(state.stream?'！':'…'):'♪';
+  $('room-bubble').textContent=searching?'ノート':waiting?(state.stream?'！':'…'):'♪';
   $('room-context').textContent=state.sessionName||'会話のつづき';
   const entry=entries[position];
   const replying=!!waiting&&!!state.stream;
   const text=!online?'おかえり。まずは右上の接続ボタンから、PCにつないでね。':!state.selected?'会話を選ぶと、ここで続きを話せるよ。':replying?state.stream:entry?.text||'おかえり！ 今日はどんな話をしようか。下の入力欄から話しかけてね。';
   $('room-speaker').textContent=entry?.role==='user'&&!replying?'あなた':'ゴンタ';
-  $('room-thinking').hidden=!waiting||replying;
+  $('room-thinking').textContent=toolSearch?'Obsidianのノートを調べています…':searchHint?'調べものをお願いしています…':'ゴンタが考え中…';
+  $('room-thinking').hidden=!waiting||(replying&&!toolSearch);
   $('room-count').textContent=entries.length?`${position+1} / ${entries.length}`:'新しい会話';
   $('room-prev').disabled=position<=0;$('room-next').disabled=position>=entries.length-1;
   write(text,!!online&&!!latest&&((!!waiting&&!!state.stream)||(animate&&entry?.role==='assistant')));$('room-dialogue').setAttribute('aria-busy',String(!!waiting));

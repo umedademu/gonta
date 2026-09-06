@@ -1,8 +1,9 @@
 import {createRoom} from './room.js';
 const $=id=>document.getElementById(id);
+let activity=null;
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
 const room=createRoom();
-function updateRoom(){room.update({connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
+function updateRoom(){room.update({activity,connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
 const clockDate=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
 const clockTime=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 function updateClocks(){const now=new Date();for(const clock of document.querySelectorAll('[data-clock]')){clock.dateTime=now.toISOString();clock.textContent=`${clockDate.format(now)} ${clockTime.format(now)}`;}}
@@ -38,13 +39,14 @@ function connect(c){
   }
   if(f.type==='response'){const p=pending.get(f.id);if(p){clearTimeout(p.timer);pending.delete(f.id);f.error?p.reject(Error(f.error)):p.resolve(f.result);}}
   if(f.type==='status')setStatus(f.status);
+  if(f.type==='activity'&&f.sessionKey===selected){activity=f.activity;updateRoom();}
   if(f.type==='chat'&&f.sessionKey===selected){
    if(f.state==='delta'){runId=f.runId;stream=f.text||stream;renderMessages();updateComposer();}
-   else if(['final','error','aborted'].includes(f.state)){runId=null;stream='';updateComposer();await loadHistory().catch(e=>notice(e.message));void refreshSessions();if(f.error)notice(f.error);}
+   else if(['final','error','aborted'].includes(f.state)){runId=null;stream='';activity=null;updateComposer();await loadHistory().catch(e=>notice(e.message));void refreshSessions();if(f.error)notice(f.error);}
   }
  };
  current.onclose=e=>{
-  clearTimeout(timer);connected=false;gatewayReady=false;setStatus({});$('connect-submit').disabled=false;
+  clearTimeout(timer);activity=null;connected=false;gatewayReady=false;setStatus({});$('connect-submit').disabled=false;
   for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('接続が切れました。再接続後に履歴を確認してください。'));}pending.clear();
   if(!intentional){const text=e.code===1008?'アクセスキーを確認してください。':'接続できません。PC側のGontaと接続先URLを確認してください。';$('connect-error').textContent=text;notice(text);if(e.code!==1008&&sessionStorage.getItem('gonta.connection'))reconnectTimer=setTimeout(()=>connect(credentials),6000);}
  };
@@ -56,9 +58,9 @@ async function refreshSessions(){sessionList=await rpc('sessions');renderSession
 function displayName(s){return s.name.replace(/^\d+\s+(?=#)/,'');}
 function renderSessions(){const list=$('sessions');list.replaceChildren();const q=$('search').value.trim().toLowerCase();const filtered=sessionList.filter(s=>displayName(s).toLowerCase().includes(q));if(!filtered.length){const p=document.createElement('p');p.className='sidebar-empty';p.textContent=connected?'会話が見つかりません。':'接続すると会話がここに並びます。';list.append(p);}for(const s of filtered){const b=document.createElement('button');b.className='session'+(s.key===selected?' active':'');b.setAttribute('aria-current',s.key===selected?'true':'false');const strong=document.createElement('strong');strong.textContent=displayName(s);const small=document.createElement('small');small.textContent=(s.channel==='discord'?'◉ Discord':'▤ Web')+(s.hasActiveRun?' · 応答中':'');b.append(strong,small);b.onclick=()=>selectSession(s.key).catch(e=>notice(e.message));list.append(b);}}
 $('search').oninput=renderSessions;
-async function selectSession(key){selected=key;runId=null;stream='';messages=[];renderMessages();renderSessions();$('welcome').hidden=true;$('sidebar').classList.remove('open');$('conversation-title').textContent=displayName(sessionList.find(s=>s.key===key)||{name:'新しい会話'});updateComposer();await loadHistory();}
-async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration)return;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();}
-async function newChat(){if(!connected){showSettings();return;}const r=await rpc('new');selected=r.key;messages=[];stream='';runId=null;historyGeneration++;sessionList.unshift({key:r.key,name:'新しい会話',channel:'web'});$('welcome').hidden=true;$('conversation-title').textContent='新しい会話';$('sidebar').classList.remove('open');renderSessions();renderMessages();updateComposer();$('message').focus();}
+async function selectSession(key){activity=null;selected=key;runId=null;stream='';messages=[];renderMessages();renderSessions();$('welcome').hidden=true;$('sidebar').classList.remove('open');$('conversation-title').textContent=displayName(sessionList.find(s=>s.key===key)||{name:'新しい会話'});updateComposer();await loadHistory();}
+async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration)return;activity=r.activity||null;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();}
+async function newChat(){if(!connected){showSettings();return;}const r=await rpc('new');activity=null;selected=r.key;messages=[];stream='';runId=null;historyGeneration++;sessionList.unshift({key:r.key,name:'新しい会話',channel:'web'});$('welcome').hidden=true;$('conversation-title').textContent='新しい会話';$('sidebar').classList.remove('open');renderSessions();renderMessages();updateComposer();$('message').focus();}
 $('new-chat').onclick=()=>newChat().catch(e=>notice(e.message));
 function renderText(el,text){const parts=text.split(/(```[\s\S]*?```)/g);for(const p of parts){if(p.startsWith('```')&&p.endsWith('```')){const pre=document.createElement('pre');const code=document.createElement('code');code.textContent=p.slice(3,-3).replace(/^[\w+-]*\n/,'');pre.append(code);el.append(pre);}else{const span=document.createElement('span');span.textContent=p;el.append(span);}}}
 function renderMessages(){updateRoom();const box=$('messages'),nearBottom=$('chat').scrollHeight-$('chat').scrollTop-$('chat').clientHeight<180;box.replaceChildren();if(!selected)return;for(const m of messages){const row=document.createElement('article');row.className='message '+m.role;const avatar=document.createElement('div');avatar.className='avatar';if(m.role==='assistant'){const img=document.createElement('img');img.src='/gonta-profile.png';img.alt='';avatar.append(img);}else avatar.textContent='YOU';const body=document.createElement('div');body.className='message-body';const author=document.createElement('div');author.className='message-author';author.textContent=m.role==='assistant'?'Gonta':'あなた';if(m.timestamp){const d=new Date(m.timestamp);if(!isNaN(d)){const t=document.createElement('time');t.textContent=d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});author.append(t);}}const content=document.createElement('div');content.className='message-text';renderText(content,m.text);body.append(author,content);row.append(avatar,body);box.append(row);}
