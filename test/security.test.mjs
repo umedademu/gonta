@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {verifyLine,signature,allowedSession} from '../relay/security.mjs';
+import {Store} from '../relay/store.mjs';
+test('LINE signatures cover exact raw bytes and reject missing/tampered bodies',()=>{const body=Buffer.from('{"events":[]}'),sig=signature(body,'test-secret');assert.ok(verifyLine(body,sig,'test-secret'));assert.ok(!verifyLine(Buffer.from('{"events": []}'),sig,'test-secret'));assert.ok(!verifyLine(body,undefined,'test-secret'));assert.ok(!verifyLine(body,sig,''));});
+test('Only intended conversations can be reached; cron, ACP and paths are rejected',()=>{assert.ok(allowedSession('agent:main:discord:channel:123456'));assert.ok(allowedSession('agent:main:main'));for(const s of ['agent:main:cron:abc','agent:codex:acp:abc','../config','agent:main:discord:channel:123\n',null])assert.ok(!allowedSession(s),String(s));});
+test('Pairing is single-use, cannot bind unknown codes; duplicate webhook delivery runs once',()=>{const s=new Store(':memory:');s.pair('ABC','agent:main:main');assert.equal(s.consume('WRONG','user1'),false);assert.equal(s.consume('ABC','user1'),true);assert.equal(s.consume('ABC','user2'),false);assert.equal(s.user('user1'),'agent:main:main');assert.equal(s.user('user2'),undefined);assert.equal(s.enqueue({webhookEventId:'event1'}),true);assert.equal(s.enqueue({webhookEventId:'event1'}),false);s.status('event1','dispatched');assert.equal(s.next(),undefined);s.close();});
