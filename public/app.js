@@ -1,10 +1,10 @@
 import {createRoom} from './room.js';
 import {discover} from './discovery.js';
 const $=id=>document.getElementById(id);
-let activity=null;
+let activity=null,backgroundActivity=null;
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
 const room=createRoom();
-function updateRoom(){room.update({activity,connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
+function updateRoom(){room.update({activity,backgroundActivity,connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
 const clockDate=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
 const clockTime=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 function updateClocks(){const now=new Date();for(const clock of document.querySelectorAll('[data-clock]')){clock.dateTime=now.toISOString();clock.textContent=`${clockDate.format(now)} ${clockTime.format(now)}`;}}
@@ -29,7 +29,7 @@ for(const id of ['settings-open','welcome-connect','connection-pill'])$(id).oncl
 document.querySelectorAll('[data-close]').forEach(el=>el.onclick=()=>$(el.dataset.close).close());
 $('menu-toggle').onclick=()=>$('sidebar').classList.toggle('open');
 document.querySelector('.main').addEventListener('click',e=>{if(!e.target.closest('#menu-toggle'))$('sidebar').classList.remove('open');});
-function setStatus(status){gatewayReady=!!status.gateway;document.body.classList.toggle('connected',connected&&gatewayReady);$('connection-label').textContent=connected?(gatewayReady?'接続中':'PCを確認'):'未接続';$('sidebar-state').textContent=connected?(gatewayReady?'OpenClawにつながっています':'OpenClawの接続を待っています'):'PCへの接続を待っています';$('line-dialog').dataset.enabled=String(!!status.line);$('line-add').hidden=!status.lineBotId;if(status.lineBotId)$('line-add').href='https://line.me/R/ti/p/'+encodeURIComponent(status.lineBotId);updateComposer();}
+function setStatus(status){backgroundActivity=status.backgroundActivity?.kind==='diary'?{kind:'diary'}:null;gatewayReady=!!status.gateway;document.body.classList.toggle('connected',connected&&gatewayReady);$('connection-label').textContent=connected?(gatewayReady?'接続中':'PCを確認'):'未接続';$('sidebar-state').textContent=connected?(gatewayReady?'OpenClawにつながっています':'OpenClawの接続を待っています'):'PCへの接続を待っています';$('line-dialog').dataset.enabled=String(!!status.line);$('line-add').hidden=!status.lineBotId;if(status.lineBotId)$('line-add').href='https://line.me/R/ti/p/'+encodeURIComponent(status.lineBotId);updateComposer();}
 function updateComposer(){updateRoom();const enabled=connected&&gatewayReady&&!!selected;$('message').disabled=!enabled;$('send').disabled=!enabled||!!runId;$('message').placeholder=enabled?'Gontaに話しかける…':'まずはPCに接続してください';$('composer-state').textContent=runId?'Gontaが考えています…':enabled?'Enterで送信 · Shift + Enterで改行':'接続後にメッセージを送信できます';$('stop').hidden=!runId;}
 function rpc(method,params={}){if(!connected)return Promise.reject(Error('PCに接続してください。'));const id=String(++requestCount);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);reject(Error('応答を確認できませんでした。再送の前に履歴を確認してください。'));},35000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({type:'request',id,method,params}));});}
 function websocketURL(value){const u=new URL(value);if(!['https:','http:','wss:','ws:'].includes(u.protocol)||u.username||u.password)throw Error('接続先URLを確認してください。');if(['http:','ws:'].includes(u.protocol)&&!['127.0.0.1','localhost','[::1]'].includes(u.hostname))throw Error('外部接続にはHTTPSのURLを指定してください。');u.protocol=['https:','wss:'].includes(u.protocol)?'wss:':'ws:';u.pathname='/ws';u.search='';u.hash='';return u.href;}

@@ -6,7 +6,7 @@ export function createRoom(){
  try{soundOn=localStorage.getItem('gonta.roomSound')!=='off';}catch{}
  const soundButton=document.createElement('button');soundButton.id='room-sound';soundButton.type='button';
  root.querySelector('.room-topline').append(soundButton);
- for(const kind of ['pc','obsidian']){const sprite=document.createElement('div');sprite.className=`room-worker room-worker-${kind}`;sprite.setAttribute('aria-hidden','true');root.querySelector('.room-scene').append(sprite);}
+ for(const kind of ['pc','obsidian','diary']){const sprite=document.createElement('div');sprite.className=`room-worker room-worker-${kind}`;sprite.setAttribute('aria-hidden','true');root.querySelector('.room-scene').append(sprite);}
  function soundLabel(){soundButton.textContent=soundOn?'音 ON':'音 OFF';soundButton.setAttribute('aria-label','文字送りの効果音');soundButton.setAttribute('aria-pressed',String(soundOn));}
  function unlock(){if(!active||!soundOn)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')void audio.resume().catch(()=>{});}catch{}}
  // Browsers require a user gesture before audio can start.
@@ -43,11 +43,13 @@ export function createRoom(){
   const searchHint=!!waiting&&!state.stream&&!toolKind&&requestedSearch;
   const searching=toolSearch||searchHint;
   const pcWork=toolKind==='pc'||(!!waiting&&!state.stream&&!toolKind&&!requestedSearch&&requestedPC);
-  root.classList.toggle('is-searching',searching);
-  root.classList.toggle('is-pc-working',pcWork);
+  const diaryWork=!!online&&state.backgroundActivity?.kind==='diary';
+  root.classList.toggle('is-diary-writing',diaryWork);
+  root.classList.toggle('is-searching',searching&&!diaryWork);
+  root.classList.toggle('is-pc-working',pcWork&&!diaryWork);
   root.classList.toggle('is-thinking',!!waiting&&!state.stream);root.classList.toggle('is-talking',!!waiting&&!!state.stream);
-  $('room-status').textContent=!online?'接続を待っています':'ゴンタは ここにいます';
-  $('room-bubble').textContent=searching?'ノート':pcWork?'ファイル':waiting?(state.stream?'！':'…'):'♪';
+  $('room-status').textContent=!online?'接続を待っています':diaryWork?'日記を更新しています':'ゴンタは ここにいます';
+  $('room-bubble').textContent=diaryWork?'日記':searching?'ノート':pcWork?'ファイル':waiting?(state.stream?'！':'…'):'♪';
   $('room-context').textContent=state.sessionName||'会話のつづき';
   const entry=entries[position];
   const replying=!!waiting&&!!state.stream;
