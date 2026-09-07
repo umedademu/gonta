@@ -5,6 +5,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {publishEndpoint} from './publish-endpoint.mjs';
 const directory=path.join(os.homedir(),'.gonta');
 const output=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../.local');
 const p=spawn(path.join(os.homedir(),'.local/bin/cloudflared'),['tunnel','--no-autoupdate','--url','http://127.0.0.1:18890'],{stdio:['ignore','pipe','pipe']});
@@ -27,6 +28,7 @@ async function sync(){
    const r=await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint',{headers:{Authorization:'Bearer '+c.line.token},signal:AbortSignal.timeout(10000)});
    if(r.ok){const state=await r.json();if(state.endpoint!==endpoint){const update=await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint',{method:'PUT',headers:{Authorization:'Bearer '+c.line.token,'Content-Type':'application/json'},body:JSON.stringify({endpoint}),signal:AbortSignal.timeout(10000)});console.log('LINE endpoint sync:',update.status);}}
   }
+  await publishEndpoint(current);
  }catch(e){console.error('Connection information sync:',e.message);}finally{syncing=false;}
 }
 const timer=setInterval(sync,30000);
