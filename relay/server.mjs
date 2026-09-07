@@ -54,6 +54,11 @@ const server=http.createServer(async(req,res)=>{
  try{
  const url=new URL(req.url,'http://localhost');
  if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{service:'gonta',ok:true});
+ if(url.pathname==='/api/connection'&&req.method==='GET'){
+  const upstream=await fetch('https://gonta-connect.umedademu.workers.dev/',{signal:AbortSignal.timeout(8000)});
+  res.setHeader('Cache-Control','no-store');
+  return json(res,upstream.status,await upstream.json());
+ }
  if(url.pathname==='/line/webhook'&&req.method==='POST'){
   if(!config.line?.secret)return json(res,503,{error:'LINE is not configured'});
   const chunks=[];let size=0;
