@@ -41,3 +41,16 @@ Use case: stylized-concept. Game pixel sprite sheet on genuinely transparent bac
 
 Use case: stylized-concept. Game pixel sprite sheet on genuinely transparent background. Reference 1 is the identity of Gonta: black dog, green square glasses, white paw tips, rounded ears, white tail tip. Reference 2 gives room perspective only, do not draw the room or furniture. Draw exactly TWO animation frames side by side in a 2:1 canvas, each in an equal square cell, aligned same scale and foot baseline, full body with small padding. Crisp chunky NES-style pixels, no labels, no text, no shadows outside character. Gonta is seen from BEHIND in three-quarter rear view facing UPPER LEFT toward the existing bookshelf. Show back of head and ears, green glasses side arm only. Standing reaching into shelf and pulling a purple notebook with cream pages. Frame 1 paw reaching upward with notebook close to body, frame 2 looking down toward open notebook in paws, back still toward viewer. Same head position and body scale, distinct paw and page movement. No front-facing eyes. No shelf drawn.
 
+## 日記の定期更新（2026-09-08）
+
+OpenClawの `cron.list` を接続時・15秒ごと・cronイベント受信時に読み取り、日記の更新／追記／作成ジョブの `state.runningAtMs` がある間、日記を書く専用アニメーションを表示する。チャット送信や会話選択がなくても表示される。終了・エラー・切断時には解除する。複数の日記更新が重なれば最後の実行が終わるまで表示する。読み取りに失敗した間は通常表示に戻し、次の確認で復帰する。定期ジョブ自体の実行やスケジュール変更は行わない。
+
+PC上でジョブ名・説明・指示文を判定し、Webには `{kind:'diary'}` のみ送る。cronの会話履歴や指示文は公開しない。日記表示はPC／Obsidian検索の作業姿より優先し、会話本文・返答の文字送りはそのまま。日記表示自体は無音。動きを減らす設定では静止画。
+
+素材 `public/room-work-diary.png` は背景込みの横2コマ、全体3:1・各コマ3:2。左右で部屋とゴンタの位置・大きさを揃え、鉛筆と手を少し動かす。CSSで0.9秒周期に切り替える。Geminiで差し替える場合も同じ構成にする。内蔵image_genで生成。
+
+最終生成プロンプト:
+
+Use case: stylized-concept. Generate a 3:1 wide horizontal two-frame pixel-art animation sheet for Gonta writing a diary in his room. EXACTLY TWO equal 3:2 landscape cells side by side, with no gap or border between. Reference 1 is the EXACT room background to preserve: bookshelf at left, blue night window in middle, CRT computer and green chair at right, sage green rug in foreground. Copy the same room into BOTH cells, keep furniture and lighting stationary and matched between frames. Reference 2 is the NEW diary-writing Gonta pose: black dog with green glasses, white muzzle/chest/paws, purple notebook and yellow pencil. Ignore/remove the checkerboard in reference 2 completely. Place just ONE small full-body diary-writing Gonta seated on the center foreground rug in EACH room cell, occupying about 32 percent of each room's height, feet at 82 percent down each cell. Frame 1 pencil touching left part of open page; frame 2 paw and pencil shifted slightly right while writing, small head tilt; no other scene differences. Dog must sit naturally on rug with a tiny contact shadow, and remain exactly same position/scale in both frames. OPAQUE finished room art filling every pixel edge to edge. Absolutely NO transparency, NO checkerboard, NO white backdrop, NO text, NO lettering, NO UI. Crisp chunky retro Japanese RPG pixel art, warm amber lighting. Final canvas aspect ratio THREE TO ONE; each half THREE TO TWO.
+
+
