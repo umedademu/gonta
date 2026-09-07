@@ -35,7 +35,7 @@ LINEを使わない場合は`line`を空のオブジェクトにします。設�
 
 ## 接続
 
-`http://127.0.0.1:18890`またはVercelのWeb画面を開き、PC側の接続先URLとアクセスキーを入力します。アクセスキーはブラウザのsessionStorageにのみ保持します。ページへの再接続は自動で行いますが、送信結果が不明なメッセージは自動再送しません。
+`http://127.0.0.1:18890`またはVercelのWeb画面を開き、PC側の接続先URLとアクセスキーを入力します。通常はアクセスキーをブラウザのsessionStorageに保持します。「この端末で接続情報を覚える」を選ぶとlocalStorageに保存して次回も自動接続します。Web版の接続先URLは自動取得します。詳しくは[接続ガイド](CONNECTION.md)を参照してください。ページへの再接続は自動で行いますが、送信結果が不明なメッセージは自動再送しません。
 
 Cloudflare Quick Tunnelを使う場合は、公式の`cloudflared`を`~/.local/bin/cloudflared`に設置し、`node scripts/tunnel.mjs`を起動します。`.local/接続情報.txt`と`.local/Gontaを開く.url`に最新情報が出力されます。これらは秘密情報を含むため共有・コミットしないでください。
 
