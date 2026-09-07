@@ -1,4 +1,5 @@
 import {createRoom} from './room.js';
+import {discover} from './discovery.js';
 const $=id=>document.getElementById(id);
 let activity=null;
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
@@ -10,8 +11,16 @@ function updateClocks(){const now=new Date();for(const clock of document.querySe
 updateClocks();setInterval(updateClocks,1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateClocks();});
 const pending=new Map();
-const saved=JSON.parse(sessionStorage.getItem('gonta.connection')||'null');
+function savedConnection(){try{return JSON.parse(sessionStorage.getItem('gonta.connection')||localStorage.getItem('gonta.remembered')||'null');}catch{return null;}}
+const saved=savedConnection();
 let credentials=saved;
+let connectionAttempt=0;
+const rememberLabel=document.createElement('label');rememberLabel.style.cssText='display:flex;align-items:center;gap:8px';
+const remember=document.createElement('input');remember.type='checkbox';remember.id='remember-connection';remember.style.width='auto';remember.checked=!!localStorage.getItem('gonta.remembered');
+rememberLabel.append(remember,document.createTextNode('この端末で接続情報を覚える'));
+$('passcode').parentElement.after(rememberLabel);
+document.querySelector('#settings .field-note').textContent='接続先URLは空欄で自動取得できます。「覚える」を選ぶと、この端末では次回から自動接続します。共有端末では選ばないでください。';
+$('relay-url').required=false;$('relay-url').placeholder='自動で最新の接続先を取得';
 const fragment=new URLSearchParams(location.hash.slice(1));
 if(fragment.get('relay')&&fragment.get('key')){credentials={url:fragment.get('relay'),key:fragment.get('key')};history.replaceState(null,'',location.pathname);}
 const notice=text=>{$('notice').textContent=text||'';$('notice').hidden=!text;};
@@ -25,8 +34,14 @@ function updateComposer(){updateRoom();const enabled=connected&&gatewayReady&&!!
 function rpc(method,params={}){if(!connected)return Promise.reject(Error('PCに接続してください。'));const id=String(++requestCount);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);reject(Error('応答を確認できませんでした。再送の前に履歴を確認してください。'));},35000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({type:'request',id,method,params}));});}
 function websocketURL(value){const u=new URL(value);if(!['https:','http:','wss:','ws:'].includes(u.protocol)||u.username||u.password)throw Error('接続先URLを確認してください。');if(['http:','ws:'].includes(u.protocol)&&!['127.0.0.1','localhost','[::1]'].includes(u.hostname))throw Error('外部接続にはHTTPSのURLを指定してください。');u.protocol=['https:','wss:'].includes(u.protocol)?'wss:':'ws:';u.pathname='/ws';u.search='';u.hash='';return u.href;}
 async function proof(nonce,key){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(nonce)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
-function connect(c){
+async function connect(c){
+ const attempt=++connectionAttempt;
  clearTimeout(reconnectTimer);intentional=false;connected=false;if(ws){ws.onclose=null;ws.close();}
+ credentials=c;setStatus({});$('connect-error').textContent='接続先を確認しています…';$('connect-submit').disabled=true;
+ if(!c.url||/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/.test(c.url)){
+  try{c={...c,url:await discover()};}catch(e){if(attempt!==connectionAttempt)return;$('connect-error').textContent=e.message;$('connect-submit').disabled=false;notice(e.message);reconnectTimer=setTimeout(()=>connect(credentials),10000);return;}
+ }
+ if(attempt!==connectionAttempt)return;
  let target;try{target=websocketURL(c.url);}catch(e){$('connect-error').textContent=e.message;return;}
  credentials=c;$('connect-error').textContent='接続しています…';$('connect-submit').disabled=true;
  const current=ws=new WebSocket(target);const timer=setTimeout(()=>current.close(),12000);
@@ -35,6 +50,7 @@ function connect(c){
   if(f.type==='challenge'){try{current.send(JSON.stringify({type:'auth',proof:await proof(f.nonce,c.key)}));}catch{current.close();}}
   if(f.type==='ready'){
    clearTimeout(timer);connected=true;sessionStorage.setItem('gonta.connection',JSON.stringify(c));localStorage.setItem('gonta.relay',c.url);$('connect-submit').disabled=false;$('connect-error').textContent='';$('settings').close();setStatus(f.status);notice('');
+   if(remember.checked)localStorage.setItem('gonta.remembered',JSON.stringify(c));else localStorage.removeItem('gonta.remembered');
    try{await refreshSessions();if(selected)await selectSession(selected);else if(sessionList.length)await selectSession(sessionList.find(x=>x.key.includes(':discord:'))?.key||sessionList[0].key);else await newChat();}catch(e){notice(e.message);}
   }
   if(f.type==='response'){const p=pending.get(f.id);if(p){clearTimeout(p.timer);pending.delete(f.id);f.error?p.reject(Error(f.error)):p.resolve(f.result);}}
@@ -53,7 +69,7 @@ function connect(c){
  current.onerror=()=>{};
 }
 $('connect-form').onsubmit=e=>{e.preventDefault();connect({url:$('relay-url').value.trim(),key:$('passcode').value.trim()});};
-$('disconnect').onclick=()=>{intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
+$('disconnect').onclick=()=>{++connectionAttempt;intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');localStorage.removeItem('gonta.remembered');remember.checked=false;credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
 async function refreshSessions(){sessionList=await rpc('sessions');renderSessions();}
 function displayName(s){return s.name.replace(/^\d+\s+(?=#)/,'');}
 function renderSessions(){const list=$('sessions');list.replaceChildren();const q=$('search').value.trim().toLowerCase();const filtered=sessionList.filter(s=>displayName(s).toLowerCase().includes(q));if(!filtered.length){const p=document.createElement('p');p.className='sidebar-empty';p.textContent=connected?'会話が見つかりません。':'接続すると会話がここに並びます。';list.append(p);}for(const s of filtered){const b=document.createElement('button');b.className='session'+(s.key===selected?' active':'');b.setAttribute('aria-current',s.key===selected?'true':'false');const strong=document.createElement('strong');strong.textContent=displayName(s);const small=document.createElement('small');small.textContent=(s.channel==='discord'?'◉ Discord':'▤ Web')+(s.hasActiveRun?' · 応答中':'');b.append(strong,small);b.onclick=()=>selectSession(s.key).catch(e=>notice(e.message));list.append(b);}}
