@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {sign} from 'node:crypto';
 import os from 'node:os';
-import {discoveryURL} from '../public/discovery.js';
+const discoveryURL='https://gonta-connect.umedademu.workers.dev/';
 let lastURL='',lastPublished=0;
 export async function publishEndpoint(url){
  if(url===lastURL&&Date.now()-lastPublished<14400000)return;
