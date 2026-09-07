@@ -49,5 +49,14 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   assert.equal(get('room-thinking').hidden,false);
   room.update({...state,runId:'files',activity:{kind:'obsidian'}});assert.ok(get('pixel-room').classes.has('is-searching'));assert.equal(get('pixel-room').classes.has('is-pc-working'),false);
   room.update({...state,runId:null});assert.equal(get('pixel-room').classes.has('is-pc-working'),false);assert.equal(get('pixel-room').classes.has('is-searching'),false);
+  const beforeDiary=notes;
+  room.update({...state,backgroundActivity:{kind:'diary'}});ticks(20);
+  assert.ok(get('pixel-room').classes.has('is-diary-writing'),'cron animates without a chat run');
+  assert.equal(get('room-status').textContent,'日記を更新しています');assert.equal(notes,beforeDiary,'cron stays silent');
+  assert.equal(get('room-text').textContent,messages.at(-1).text,'cron does not replace conversation');
+  room.update({...state,backgroundActivity:{kind:'diary'},runId:'files',activity:{kind:'pc'}});
+  assert.ok(get('pixel-room').classes.has('is-diary-writing'));assert.equal(get('pixel-room').classes.has('is-pc-working'),false,'only one sprite');
+  room.update({...state,backgroundActivity:null});assert.equal(get('pixel-room').classes.has('is-diary-writing'),false);
+  room.update({...state,connected:false,backgroundActivity:{kind:'diary'}});assert.equal(get('pixel-room').classes.has('is-diary-writing'),false);
  }finally{for(const [name,descriptor]of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });
