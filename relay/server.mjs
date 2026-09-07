@@ -1,3 +1,4 @@
+import {DiaryMonitor} from './diary.mjs';
 import {ActivityTracker} from './activity.mjs';
 import http from 'node:http';
 import path from 'node:path';
@@ -20,6 +21,7 @@ if(!config.passcode||config.passcode.length<24)throw Error('A passcode of at lea
 const oc=JSON.parse(readFileSync(process.env.OPENCLAW_CONFIG||path.join(os.homedir(),'.openclaw/openclaw.json')));
 const gateway=new Gateway({url:`ws://127.0.0.1:${oc.gateway.port||18789}`,token:oc.gateway.auth.token,directory});
 const activities=new ActivityTracker();
+const diary=new DiaryMonitor((method,params)=>gateway.request(method,params),()=>{for(const ws of peers)send(ws,{type:'status',status:info()});});
 const store=new Store(path.join(directory,'gonta.sqlite'));
 try{chmodSync(path.join(directory,'gonta.sqlite'),0o600);}catch{}
 const port=Number(process.env.PORT||18890),peers=new Set();
@@ -30,7 +32,7 @@ setInterval(()=>{for(const[k,v]of limiters)if(v.until<Date.now())limiters.delete
 const send=(ws,obj)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj));};
 async function sessions(){const r=await gateway.request('sessions.list',{limit:200});return(r.sessions||[]).filter(x=>allowedSession(x.key)).map(x=>({key:x.key,name:x.label||x.displayName|| (x.key.endsWith(':main')?'メインの会話':'新しい会話'),channel:x.channel||'web',updatedAt:x.updatedAt,hasActiveRun:x.hasActiveRun}));}
 async function history(key){if(!allowedSession(key))throw Error('この会話にはアクセスできません。');const r=await gateway.request('chat.history',{sessionKey:key,limit:100});return{activity:activities.get(key),messages:(r.messages||[]).filter(m=>['user','assistant'].includes(m.role)).map(m=>({id:m.id||m.messageId,role:m.role,text:textContent(m),timestamp:m.timestamp})).filter(m=>m.text),sessionInfo:r.sessionInfo,inFlightRun:r.inFlightRun?{runId:r.inFlightRun.runId,text:r.inFlightRun.text}:null};}
-function info(){return{gateway:gateway.ready,version:gateway.version,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts()};}
+function info(){return{gateway:gateway.ready,backgroundActivity:diary.activity,version:gateway.version,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts()};}
 async function rpc(ws,method,p){
  switch(method){
  case 'status':return info();
@@ -69,7 +71,7 @@ const server=http.createServer(async(req,res)=>{
   json(res,200,{ok:true});void drain();return;
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed'});
- const files={'/':'index.html','/app.js':'app.js','/discovery.js':'discovery.js','/theme.js':'theme.js','/room.js':'room.js','/room.css':'room.css','/room-background.png':'room-background.png','/room-gonta.png':'room-gonta.png','/room-work-pc.png':'room-work-pc.png','/room-work-obsidian.png':'room-work-obsidian.png','/DotGothic16-Regular.ttf':'DotGothic16-Regular.ttf','/DotGothic16-OFL.txt':'DotGothic16-OFL.txt','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
+ const files={'/':'index.html','/app.js':'app.js','/discovery.js':'discovery.js','/theme.js':'theme.js','/room.js':'room.js','/room.css':'room.css','/room-background.png':'room-background.png','/room-gonta.png':'room-gonta.png','/room-work-pc.png':'room-work-pc.png','/room-work-diary.png':'room-work-diary.png','/room-work-obsidian.png':'room-work-obsidian.png','/DotGothic16-Regular.ttf':'DotGothic16-Regular.ttf','/DotGothic16-OFL.txt':'DotGothic16-OFL.txt','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
  const file=files[url.pathname];if(!file)return json(res,404,{error:'Not found'});
  const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
  res.writeHead(200,{'Content-Type':types[path.extname(file)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://gonta-connect.umedademu.workers.dev wss: ws://127.0.0.1:* ws://localhost:*; base-uri 'none'; frame-ancestors 'none'"});res.end(req.method==='HEAD'?'':readFileSync(path.join(root,'public',file)));
@@ -102,12 +104,13 @@ wss.on('connection',(ws,req)=>{
  ws.on('close',()=>{clearTimeout(timeout);peers.delete(ws);});ws.on('error',()=>{});
 });
 gateway.on('event',frame=>{
+ if(frame.event==='cron')void diary.refresh();
  const p=frame.payload;
  const change=activities.event(frame);if(change)for(const ws of peers)if(ws.session===change.sessionKey)send(ws,{type:'activity',...change});
  if(frame.event==='chat'&&allowedSession(p?.sessionKey))for(const ws of peers)if(ws.session===p.sessionKey)send(ws,{type:'chat',sessionKey:p.sessionKey,runId:p.runId,state:p.state,text:textContent(p.message),error:p.errorMessage});
 });
-gateway.on('ready',()=>{console.log('OpenClaw connected');for(const ws of peers)send(ws,{type:'status',status:info()});void drain();});
-gateway.on('offline',()=>{for(const ws of peers)send(ws,{type:'status',status:info()});});
+gateway.on('ready',()=>{diary.start();console.log('OpenClaw connected');for(const ws of peers)send(ws,{type:'status',status:info()});void drain();});
+gateway.on('offline',()=>{diary.stop();for(const ws of peers)send(ws,{type:'status',status:info()});});
 gateway.on('diagnostic',e=>console.error('Gateway:',e));
 
 async function lineReply(e,text){
@@ -156,4 +159,4 @@ async function drain(){
  }}finally{draining=false;}
 }
 server.listen(port,'127.0.0.1',()=>console.log(`Gonta listening on http://127.0.0.1:${port}`));gateway.connect();
-process.on('SIGTERM',()=>{gateway.stop();for(const ws of wss.clients)ws.close();server.close(()=>{store.close();process.exit(0);});});
+process.on('SIGTERM',()=>{diary.stop();gateway.stop();for(const ws of wss.clients)ws.close();server.close(()=>{store.close();process.exit(0);});});
