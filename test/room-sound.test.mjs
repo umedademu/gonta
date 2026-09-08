@@ -13,7 +13,7 @@ test('room sound follows newly revealed reply characters, never thinking or hist
  try{
   globalThis.document={hidden:false,body:element(),getElementById:get,createElement:()=>element(),addEventListener:(name,fn)=>listeners.set(name,fn)};
   // Capture the dynamically inserted sound button.
-  get('pixel-room').querySelector=()=>({append:button=>elements.set(button.id,button)});
+  get('header-actions').append=button=>elements.set(button.id,button);
   globalThis.localStorage={getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)};
   globalThis.matchMedia=()=>({matches:false,addEventListener(){}});
   globalThis.setInterval=cb=>{intervals.set(++sequence,cb);return sequence;};globalThis.clearInterval=id=>intervals.delete(id);
@@ -52,7 +52,7 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   const beforeDiary=notes;
   room.update({...state,backgroundActivity:{kind:'diary'}});ticks(20);
   assert.ok(get('pixel-room').classes.has('is-diary-writing'),'cron animates without a chat run');
-  assert.equal(get('room-status').textContent,'日記を更新しています');assert.equal(notes,beforeDiary,'cron stays silent');
+  assert.equal(get('room-bubble').textContent,'日記');assert.equal(notes,beforeDiary,'cron stays silent');
   assert.equal(get('room-text').textContent,messages.at(-1).text,'cron does not replace conversation');
   room.update({...state,backgroundActivity:{kind:'diary'},runId:'files',activity:{kind:'pc'}});
   assert.ok(get('pixel-room').classes.has('is-diary-writing'));assert.equal(get('pixel-room').classes.has('is-pc-working'),false,'only one sprite');
