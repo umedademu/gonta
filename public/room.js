@@ -5,7 +5,7 @@ export function createRoom(){
  let soundOn=true,audio;
  try{soundOn=localStorage.getItem('gonta.roomSound')!=='off';}catch{}
  const soundButton=document.createElement('button');soundButton.id='room-sound';soundButton.type='button';
- root.querySelector('.room-topline').append(soundButton);
+ $('header-actions').append(soundButton);
  for(const kind of ['pc','obsidian','diary']){const sprite=document.createElement('div');sprite.className=`room-worker room-worker-${kind}`;sprite.setAttribute('aria-hidden','true');root.querySelector('.room-scene').append(sprite);}
  function soundLabel(){soundButton.textContent=soundOn?'音 ON':'音 OFF';soundButton.setAttribute('aria-label','文字送りの効果音');soundButton.setAttribute('aria-pressed',String(soundOn));}
  function unlock(){if(!active||!soundOn)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')void audio.resume().catch(()=>{});}catch{}}
@@ -48,7 +48,6 @@ export function createRoom(){
   root.classList.toggle('is-searching',searching&&!diaryWork);
   root.classList.toggle('is-pc-working',pcWork&&!diaryWork);
   root.classList.toggle('is-thinking',!!waiting&&!state.stream);root.classList.toggle('is-talking',!!waiting&&!!state.stream);
-  $('room-status').textContent=!online?'接続を待っています':diaryWork?'日記を更新しています':'ゴンタは ここにいます';
   $('room-bubble').textContent=diaryWork?'日記':searching?'ノート':pcWork?'ファイル':waiting?(state.stream?'！':'…'):'♪';
   $('room-context').textContent=state.sessionName||'会話のつづき';
   const entry=entries[position];
