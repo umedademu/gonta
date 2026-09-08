@@ -55,7 +55,7 @@ header{height:52px;padding:0 24px}
 .room-mode #room-sound{display:block}
 .main,#chat{min-height:0}
 .room-mode .pixel-room{display:flex;flex-direction:column;height:100%;min-height:440px;width:100%;padding:10px 24px;gap:10px}
-.room-mode .room-scene{flex:none;align-self:center;width:min(100%,calc(clamp(140px,24dvh,220px) * 1.5));max-height:none;aspect-ratio:3/2}
+.room-mode .room-scene{flex:none;align-self:center;width:min(100%,calc(clamp(182px,31.2dvh,286px) * 1.5));max-height:none;aspect-ratio:3/2}
 .room-mode .room-dialogue{display:flex;flex-direction:column;flex:1;min-height:220px;margin-top:0;padding:12px 16px}
 .room-mode .room-text{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}
 .room-dialogue-heading,.room-controls,.room-thinking{flex-shrink:0}
@@ -70,7 +70,7 @@ header{height:52px;padding:0 24px}
  #room-sound{font-size:10px;padding:4px 6px;min-height:30px}
  .connection-pill{padding:6px 7px}
  .room-mode .pixel-room{padding:8px 12px;gap:8px;min-height:400px}
- .room-mode .room-scene{width:min(100%,calc(clamp(120px,21dvh,170px) * 1.5))}
+ .room-mode .room-scene{width:min(100%,calc(clamp(156px,27.3dvh,221px) * 1.5))}
  .room-mode .room-dialogue{padding:10px 12px}
  .room-mode footer{padding:5px 12px max(6px,env(safe-area-inset-bottom))}
  .room-clock{top:auto;bottom:6px;right:6px;font-size:10px;padding:3px 5px}
