@@ -58,5 +58,14 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   assert.ok(get('pixel-room').classes.has('is-diary-writing'));assert.equal(get('pixel-room').classes.has('is-pc-working'),false,'only one sprite');
   room.update({...state,backgroundActivity:null});assert.equal(get('pixel-room').classes.has('is-diary-writing'),false);
   room.update({...state,connected:false,backgroundActivity:{kind:'diary'}});assert.equal(get('pixel-room').classes.has('is-diary-writing'),false);
+  get('room-toggle').onclick();
+  messages.push({role:'user',text:'もう一度自己紹介して'});room.update(state);
+  const noteCount=notes;
+  room.update({...state,runId:'final-test',stream:'こんにちは、私はゴンタです。'});ticks(3);
+  assert.equal(get('room-text').textContent,'こんに');
+  messages.push({role:'assistant',text:'こんにちは、私はゴンタです。'});room.update(state);
+  assert.equal(get('room-text').textContent,'こんに','completion preserves the reveal cursor');
+  ticks(1);assert.equal(get('room-text').textContent,'こんにち');
+  ticks(30);assert.equal(notes-noteCount,Array.from('こんにちは、私はゴンタです。').length,'each character sounds only once');
  }finally{for(const [name,descriptor]of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });
