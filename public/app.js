@@ -57,8 +57,16 @@ async function connect(c){
   if(f.type==='status')setStatus(f.status);
   if(f.type==='activity'&&f.sessionKey===selected){activity=f.activity;updateRoom();}
   if(f.type==='chat'&&f.sessionKey===selected){
+   ++historyGeneration; // Ignore history snapshots requested before this newer event.
    if(f.state==='delta'){runId=f.runId;stream=f.text||stream;renderMessages();updateComposer();}
-   else if(['final','error','aborted'].includes(f.state)){runId=null;stream='';activity=null;updateComposer();await loadHistory().catch(e=>notice(e.message));void refreshSessions();if(f.error)notice(f.error);}
+   else if(['final','error','aborted'].includes(f.state)){
+    // Commit the displayed reply before clearing its stream, in one render.
+    const text=f.text||stream;
+    if(text&&!(messages.at(-1)?.role==='assistant'&&messages.at(-1).text===text))messages.push({role:'assistant',text,timestamp:Date.now()});
+    runId=null;stream='';activity=null;renderMessages();updateComposer();
+    if(!text)await loadHistory().catch(e=>notice(e.message));
+    void refreshSessions();if(f.error)notice(f.error);
+   }
   }
  };
  current.onclose=e=>{
@@ -75,7 +83,7 @@ function displayName(s){return s.name.replace(/^\d+\s+(?=#)/,'');}
 function renderSessions(){const list=$('sessions');list.replaceChildren();const q=$('search').value.trim().toLowerCase();const filtered=sessionList.filter(s=>displayName(s).toLowerCase().includes(q));if(!filtered.length){const p=document.createElement('p');p.className='sidebar-empty';p.textContent=connected?'会話が見つかりません。':'接続すると会話がここに並びます。';list.append(p);}for(const s of filtered){const b=document.createElement('button');b.className='session'+(s.key===selected?' active':'');b.setAttribute('aria-current',s.key===selected?'true':'false');const strong=document.createElement('strong');strong.textContent=displayName(s);const small=document.createElement('small');small.textContent=(s.channel==='discord'?'◉ Discord':'▤ Web')+(s.hasActiveRun?' · 応答中':'');b.append(strong,small);b.onclick=()=>selectSession(s.key).catch(e=>notice(e.message));list.append(b);}}
 $('search').oninput=renderSessions;
 async function selectSession(key){activity=null;selected=key;runId=null;stream='';messages=[];renderMessages();renderSessions();$('welcome').hidden=true;$('sidebar').classList.remove('open');$('conversation-title').textContent=displayName(sessionList.find(s=>s.key===key)||{name:'新しい会話'});updateComposer();await loadHistory();}
-async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration)return;activity=r.activity||null;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();}
+async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration)return;if(runId&&((!r.inFlightRun&&r.sessionInfo?.hasActiveRun)||(r.inFlightRun?.runId===runId&&stream.startsWith(r.inFlightRun.text||'')&&stream!==(r.inFlightRun.text||''))))return;activity=r.activity||null;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();}
 async function newChat(){if(!connected){showSettings();return;}const r=await rpc('new');activity=null;selected=r.key;messages=[];stream='';runId=null;historyGeneration++;sessionList.unshift({key:r.key,name:'新しい会話',channel:'web'});$('welcome').hidden=true;$('conversation-title').textContent='新しい会話';$('sidebar').classList.remove('open');renderSessions();renderMessages();updateComposer();$('message').focus();}
 $('new-chat').onclick=()=>newChat().catch(e=>notice(e.message));
 function renderText(el,text){const parts=text.split(/(```[\s\S]*?```)/g);for(const p of parts){if(p.startsWith('```')&&p.endsWith('```')){const pre=document.createElement('pre');const code=document.createElement('code');code.textContent=p.slice(3,-3).replace(/^[\w+-]*\n/,'');pre.append(code);el.append(pre);}else{const span=document.createElement('span');span.textContent=p;el.append(span);}}}
@@ -84,7 +92,7 @@ function renderMessages(){updateRoom();const box=$('messages'),nearBottom=$('cha
  if(!messages.length&&!runId){const empty=document.createElement('div');empty.className='empty-chat';empty.textContent='ここから、新しい会話を。';box.append(empty);}
  if(nearBottom||messages.length<5)$('chat').scrollTop=$('chat').scrollHeight;
 }
-$('composer').onsubmit=async e=>{e.preventDefault();const message=$('message').value.trim();if(!message||!connected||!selected||runId)return;const key=selected,id=crypto.randomUUID();runId=id;messages.push({role:'user',text:message,timestamp:Date.now()});$('message').value='';$('message').style.height='auto';renderMessages();updateComposer();notice('');try{const r=await rpc('send',{sessionKey:key,message,idempotencyKey:id});if(selected===key&&runId===id)runId=r.runId||id;}catch(e){notice(e.message);if(selected===key){runId=null;await loadHistory().catch(()=>{});}}finally{updateComposer();}};
+$('composer').onsubmit=async e=>{e.preventDefault();const message=$('message').value.trim();if(!message||!connected||!selected||runId)return;const key=selected,id=crypto.randomUUID();++historyGeneration;runId=id;messages.push({role:'user',text:message,timestamp:Date.now()});$('message').value='';$('message').style.height='auto';renderMessages();updateComposer();notice('');try{const r=await rpc('send',{sessionKey:key,message,idempotencyKey:id});if(selected===key&&runId===id)runId=r.runId||id;}catch(e){notice(e.message);if(selected===key){runId=null;await loadHistory().catch(()=>{});}}finally{updateComposer();}};
 $('message').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('message').oninput=()=>{$('message').style.height='auto';$('message').style.height=Math.min($('message').scrollHeight,180)+'px';};
 $('stop').onclick=async()=>{try{await rpc('abort',{sessionKey:selected,runId});await loadHistory();}catch(e){notice(e.message);}};
