@@ -2,6 +2,8 @@ import {createRoom} from './room.js';
 import {discover} from './discovery.js';
 const $=id=>document.getElementById(id);
 let activity=null,backgroundActivity=null;
+let historyReady=false,historyActive=false,editingQueued=null;
+const sendQueues=new Map(),queuePauses=new Map(),dispatches=new Map();
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
 const room=createRoom();
 function updateRoom(){room.update({activity,backgroundActivity,connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
@@ -30,14 +32,14 @@ document.querySelectorAll('[data-close]').forEach(el=>el.onclick=()=>$(el.datase
 $('menu-toggle').onclick=()=>$('sidebar').classList.toggle('open');
 document.querySelector('.main').addEventListener('click',e=>{if(!e.target.closest('#menu-toggle'))$('sidebar').classList.remove('open');});
 function setStatus(status){backgroundActivity=status.backgroundActivity?.kind==='diary'?{kind:'diary'}:null;gatewayReady=!!status.gateway;document.body.classList.toggle('connected',connected&&gatewayReady);$('connection-label').textContent=connected?(gatewayReady?'接続中':'PCを確認'):'未接続';$('sidebar-state').textContent=connected?(gatewayReady?'OpenClawにつながっています':'OpenClawの接続を待っています'):'PCへの接続を待っています';$('line-dialog').dataset.enabled=String(!!status.line);$('line-add').hidden=!status.lineBotId;if(status.lineBotId)$('line-add').href='https://line.me/R/ti/p/'+encodeURIComponent(status.lineBotId);updateComposer();}
-function updateComposer(){updateRoom();const enabled=connected&&gatewayReady&&!!selected;$('message').disabled=!enabled;$('send').disabled=!enabled||!!runId;$('message').placeholder=enabled?'Gontaに話しかける…':'まずはPCに接続してください';$('composer-state').textContent=runId?'Gontaが考えています…':enabled?'Enterで送信 · Shift + Enterで改行':'接続後にメッセージを送信できます';$('stop').hidden=!runId;}
+function updateComposer(){renderQueue();updateRoom();const enabled=connected&&gatewayReady&&!!selected;$('message').disabled=!enabled;$('send').disabled=!enabled;$('message').placeholder=enabled?(editingQueued?'待機中のメッセージを編集…':runId||historyActive?'追加メッセージを送信待ちに…':'Gontaに話しかける…'):'まずはPCに接続してください';$('send').setAttribute('aria-label',editingQueued?'待機中のメッセージを保存':runId||historyActive?'メッセージを送信待ちに追加':'メッセージを送信');$('composer-state').textContent=editingQueued?'編集して送信ボタンで保存':runId||historyActive?'返答待ちの間も追加できます':enabled?'Enterで送信 · Shift + Enterで改行':'接続後にメッセージを送信できます';$('stop').hidden=!runId;}
 function rpc(method,params={}){if(!connected)return Promise.reject(Error('PCに接続してください。'));const id=String(++requestCount);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);reject(Error('応答を確認できませんでした。再送の前に履歴を確認してください。'));},35000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({type:'request',id,method,params}));});}
 function websocketURL(value){const u=new URL(value);if(!['https:','http:','wss:','ws:'].includes(u.protocol)||u.username||u.password)throw Error('接続先URLを確認してください。');if(['http:','ws:'].includes(u.protocol)&&!['127.0.0.1','localhost','[::1]'].includes(u.hostname))throw Error('外部接続にはHTTPSのURLを指定してください。');u.protocol=['https:','wss:'].includes(u.protocol)?'wss:':'ws:';u.pathname='/ws';u.search='';u.hash='';return u.href;}
 async function proof(nonce,key){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(nonce)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function connect(c){
  const attempt=++connectionAttempt;
  clearTimeout(reconnectTimer);intentional=false;connected=false;if(ws){ws.onclose=null;ws.close();}
- credentials=c;setStatus({});$('connect-error').textContent='接続先を確認しています…';$('connect-submit').disabled=true;
+ credentials=c;historyReady=false;setStatus({});$('connect-error').textContent='接続先を確認しています…';$('connect-submit').disabled=true;
  if(!c.url||/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/.test(c.url)){
   try{c={...c,url:await discover()};}catch(e){if(attempt!==connectionAttempt)return;$('connect-error').textContent=e.message;$('connect-submit').disabled=false;notice(e.message);reconnectTimer=setTimeout(()=>connect(credentials),10000);return;}
  }
@@ -54,37 +56,38 @@ async function connect(c){
    try{await refreshSessions();if(selected)await selectSession(selected);else if(sessionList.length)await selectSession(sessionList.find(x=>x.key.includes(':discord:'))?.key||sessionList[0].key);else await newChat();}catch(e){notice(e.message);}
   }
   if(f.type==='response'){const p=pending.get(f.id);if(p){clearTimeout(p.timer);pending.delete(f.id);f.error?p.reject(Error(f.error)):p.resolve(f.result);}}
-  if(f.type==='status')setStatus(f.status);
+  if(f.type==='status'){setStatus(f.status);if(!gatewayReady)historyReady=false;else if(selected&&!historyReady)void loadHistory().catch(e=>notice(e.message));}
   if(f.type==='activity'&&f.sessionKey===selected){activity=f.activity;updateRoom();}
   if(f.type==='chat'&&f.sessionKey===selected){
    ++historyGeneration; // Ignore history snapshots requested before this newer event.
-   if(f.state==='delta'){runId=f.runId;stream=f.text||stream;renderMessages();updateComposer();}
+   if(f.state==='delta'){historyActive=true;runId=f.runId;stream=f.text||stream;renderMessages();updateComposer();}
    else if(['final','error','aborted'].includes(f.state)){
+    if(f.runId&&runId&&f.runId!==runId)return;
     // Commit the displayed reply before clearing its stream, in one render.
     const text=f.text||stream;
     if(text&&!(messages.at(-1)?.role==='assistant'&&messages.at(-1).text===text))messages.push({role:'assistant',text,timestamp:Date.now()});
-    runId=null;stream='';activity=null;renderMessages();updateComposer();
+    runId=null;stream='';activity=null;historyActive=false;historyReady=true;if(f.state!=='final')queuePauses.set(selected,'応答が停止しました。再開すると待機中のメッセージを送信します。');renderMessages();updateComposer();
     if(!text)await loadHistory().catch(e=>notice(e.message));
-    void refreshSessions();if(f.error)notice(f.error);
+    void refreshSessions();if(f.error)notice(f.error);scheduleQueue();
    }
   }
  };
  current.onclose=e=>{
-  clearTimeout(timer);activity=null;connected=false;gatewayReady=false;setStatus({});$('connect-submit').disabled=false;
+  clearTimeout(timer);historyReady=false;activity=null;connected=false;gatewayReady=false;setStatus({});$('connect-submit').disabled=false;
   for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('接続が切れました。再接続後に履歴を確認してください。'));}pending.clear();
   if(!intentional){const text=e.code===1008?'アクセスキーを確認してください。':'接続できません。PC側のGontaと接続先URLを確認してください。';$('connect-error').textContent=text;notice(text);if(e.code!==1008&&sessionStorage.getItem('gonta.connection'))reconnectTimer=setTimeout(()=>connect(credentials),6000);}
  };
  current.onerror=()=>{};
 }
 $('connect-form').onsubmit=e=>{e.preventDefault();connect({url:$('relay-url').value.trim(),key:$('passcode').value.trim()});};
-$('disconnect').onclick=()=>{++connectionAttempt;intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');localStorage.removeItem('gonta.remembered');remember.checked=false;credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
+$('disconnect').onclick=()=>{sendQueues.clear();queuePauses.clear();editingQueued=null;historyReady=false;historyActive=false;++connectionAttempt;intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');localStorage.removeItem('gonta.remembered');remember.checked=false;credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
 async function refreshSessions(){sessionList=await rpc('sessions');renderSessions();}
 function displayName(s){return s.name.replace(/^\d+\s+(?=#)/,'');}
 function renderSessions(){const list=$('sessions');list.replaceChildren();const q=$('search').value.trim().toLowerCase();const filtered=sessionList.filter(s=>displayName(s).toLowerCase().includes(q));if(!filtered.length){const p=document.createElement('p');p.className='sidebar-empty';p.textContent=connected?'会話が見つかりません。':'接続すると会話がここに並びます。';list.append(p);}for(const s of filtered){const b=document.createElement('button');b.className='session'+(s.key===selected?' active':'');b.setAttribute('aria-current',s.key===selected?'true':'false');const strong=document.createElement('strong');strong.textContent=displayName(s);const small=document.createElement('small');small.textContent=(s.channel==='discord'?'◉ Discord':'▤ Web')+(s.hasActiveRun?' · 応答中':'');b.append(strong,small);b.onclick=()=>selectSession(s.key).catch(e=>notice(e.message));list.append(b);}}
 $('search').oninput=renderSessions;
-async function selectSession(key){activity=null;selected=key;runId=null;stream='';messages=[];renderMessages();renderSessions();$('welcome').hidden=true;$('sidebar').classList.remove('open');$('conversation-title').textContent=displayName(sessionList.find(s=>s.key===key)||{name:'新しい会話'});updateComposer();await loadHistory();}
-async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration)return;if(runId&&((!r.inFlightRun&&r.sessionInfo?.hasActiveRun)||(r.inFlightRun?.runId===runId&&stream.startsWith(r.inFlightRun.text||'')&&stream!==(r.inFlightRun.text||''))))return;activity=r.activity||null;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();}
-async function newChat(){if(!connected){showSettings();return;}const r=await rpc('new');activity=null;selected=r.key;messages=[];stream='';runId=null;historyGeneration++;sessionList.unshift({key:r.key,name:'新しい会話',channel:'web'});$('welcome').hidden=true;$('conversation-title').textContent='新しい会話';$('sidebar').classList.remove('open');renderSessions();renderMessages();updateComposer();$('message').focus();}
+async function selectSession(key){cancelQueueEdit();historyReady=false;historyActive=false;activity=null;selected=key;runId=null;stream='';messages=[];renderMessages();renderSessions();$('welcome').hidden=true;$('sidebar').classList.remove('open');$('conversation-title').textContent=displayName(sessionList.find(s=>s.key===key)||{name:'新しい会話'});updateComposer();await loadHistory();}
+async function loadHistory(){if(!selected)return;const key=selected,generation=++historyGeneration;const r=await rpc('history',{sessionKey:key});if(key!==selected||generation!==historyGeneration||dispatches.has(key))return;if(runId&&((!r.inFlightRun&&r.sessionInfo?.hasActiveRun)||(r.inFlightRun?.runId===runId&&stream.startsWith(r.inFlightRun.text||'')&&stream!==(r.inFlightRun.text||''))))return;historyReady=true;historyActive=!!r.inFlightRun||!!r.sessionInfo?.hasActiveRun;activity=r.activity||null;messages=r.messages;runId=r.inFlightRun?.runId||null;stream=r.inFlightRun?.text||'';if(!runId&&r.sessionInfo?.hasActiveRun)notice('この会話ではOpenClawが処理中です。完了すると履歴が更新されます。');renderMessages();updateComposer();scheduleQueue();}
+async function newChat(){if(!connected){showSettings();return;}const r=await rpc('new');cancelQueueEdit();historyReady=true;historyActive=false;activity=null;selected=r.key;messages=[];stream='';runId=null;historyGeneration++;sessionList.unshift({key:r.key,name:'新しい会話',channel:'web'});$('welcome').hidden=true;$('conversation-title').textContent='新しい会話';$('sidebar').classList.remove('open');renderSessions();renderMessages();updateComposer();$('message').focus();}
 $('new-chat').onclick=()=>newChat().catch(e=>notice(e.message));
 function renderText(el,text){const parts=text.split(/(```[\s\S]*?```)/g);for(const p of parts){if(p.startsWith('```')&&p.endsWith('```')){const pre=document.createElement('pre');const code=document.createElement('code');code.textContent=p.slice(3,-3).replace(/^[\w+-]*\n/,'');pre.append(code);el.append(pre);}else{const span=document.createElement('span');span.textContent=p;el.append(span);}}}
 function renderMessages(){updateRoom();const box=$('messages'),nearBottom=$('chat').scrollHeight-$('chat').scrollTop-$('chat').clientHeight<180;box.replaceChildren();if(!selected)return;for(const m of messages){const row=document.createElement('article');row.className='message '+m.role;const avatar=document.createElement('div');avatar.className='avatar';if(m.role==='assistant'){const img=document.createElement('img');img.src='/gonta-profile.png';img.alt='';avatar.append(img);}else avatar.textContent='YOU';const body=document.createElement('div');body.className='message-body';const author=document.createElement('div');author.className='message-author';author.textContent=m.role==='assistant'?'Gonta':'あなた';if(m.timestamp){const d=new Date(m.timestamp);if(!isNaN(d)){const t=document.createElement('time');t.textContent=d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});author.append(t);}}const content=document.createElement('div');content.className='message-text';renderText(content,m.text);body.append(author,content);row.append(avatar,body);box.append(row);}
@@ -92,10 +95,55 @@ function renderMessages(){updateRoom();const box=$('messages'),nearBottom=$('cha
  if(!messages.length&&!runId){const empty=document.createElement('div');empty.className='empty-chat';empty.textContent='ここから、新しい会話を。';box.append(empty);}
  if(nearBottom||messages.length<5)$('chat').scrollTop=$('chat').scrollHeight;
 }
-$('composer').onsubmit=async e=>{e.preventDefault();const message=$('message').value.trim();if(!message||!connected||!selected||runId)return;const key=selected,id=crypto.randomUUID();++historyGeneration;runId=id;messages.push({role:'user',text:message,timestamp:Date.now()});$('message').value='';$('message').style.height='auto';renderMessages();updateComposer();notice('');try{const r=await rpc('send',{sessionKey:key,message,idempotencyKey:id});if(selected===key&&runId===id)runId=r.runId||id;}catch(e){notice(e.message);if(selected===key){runId=null;await loadHistory().catch(()=>{});}}finally{updateComposer();}};
+// Queues belong to their conversation and run only while that conversation is open.
+function currentQueue(){return sendQueues.get(selected)||[];}
+function scheduleQueue(){setTimeout(()=>void drainQueue(),0);}
+function cancelQueueEdit(){if(editingQueued){editingQueued=null;$('message').value='';$('message').style.height='auto';}}
+function renderQueue(){
+ const items=currentQueue(),pause=queuePauses.get(selected),box=$('send-queue');
+ box.hidden=!items.length;$('queue-title').textContent=`送信待ち ${items.length}件`;
+ $('queue-note').textContent=pause||'返答後に順番に送信 · このタブで会話を開いている間に送信します';
+ $('queue-resume').hidden=!pause;$('queue-edit-cancel').hidden=!editingQueued;
+ const list=$('queue-items');list.replaceChildren();
+ for(const [index,item] of items.entries()){
+  const row=document.createElement('li'),text=document.createElement('span');text.textContent=`${index+1}. ${item.message}`;text.title=item.message;
+  const edit=document.createElement('button');edit.type='button';edit.textContent='編集';edit.disabled=!!item.uncertain;edit.setAttribute('aria-label',`${index+1}件目の待機メッセージを編集`);
+  edit.onclick=()=>{if($('message').value.trim()&&!editingQueued){notice('入力中の文章を送信するか消してから、待機中のメッセージを編集してください。');return;}editingQueued=item.id;$('message').value=item.message;$('message').oninput();updateComposer();$('message').focus();};
+  const remove=document.createElement('button');remove.type='button';remove.textContent='取消';remove.setAttribute('aria-label',`${index+1}件目の待機メッセージを取り消す`);
+  remove.onclick=()=>{const i=items.indexOf(item);if(i>=0)items.splice(i,1);if(editingQueued===item.id)cancelQueueEdit();if(!items.length)queuePauses.delete(selected);updateComposer();scheduleQueue();};
+  row.append(text,edit,remove);list.append(row);
+ }
+}
+$('queue-edit-cancel').onclick=()=>{cancelQueueEdit();updateComposer();scheduleQueue();};
+$('queue-resume').onclick=async()=>{const key=selected;try{await loadHistory();if(selected===key){queuePauses.delete(key);updateComposer();scheduleQueue();}}catch(e){notice(e.message);}};
+async function drainQueue(){
+ const key=selected,items=currentQueue();
+ if(!key||!items.length||!connected||!gatewayReady||!historyReady||historyActive||runId||dispatches.has(key)||queuePauses.has(key)||editingQueued)return;
+ const item=items.shift(),id=item.id;dispatches.set(key,item);++historyGeneration;historyActive=true;runId=id;
+ messages.push({role:'user',text:item.message,timestamp:Date.now()});renderMessages();updateComposer();notice('');
+ try{
+  const r=await rpc('send',{sessionKey:key,message:item.message,idempotencyKey:id});
+  if(selected===key&&runId===id)runId=r.runId||id;
+ }catch(e){
+  // Outcome may be uncertain: retain the idempotency key and require manual resume.
+  if(sendQueues.get(key)===items){item.uncertain=true;items.unshift(item);queuePauses.set(key,'送信を確認できませんでした。履歴を確認してから再開してください。');}
+  if(selected===key){historyReady=false;notice(e.message);}
+ }finally{
+  dispatches.delete(key);
+  if(selected===key){updateComposer();if(!historyReady&&connected)await loadHistory().catch(()=>{});scheduleQueue();}
+ }
+}
+$('composer').onsubmit=e=>{
+ e.preventDefault();const message=$('message').value.trim();if(!message||!connected||!gatewayReady||!selected)return;
+ if(message.length>20000){notice('メッセージは20,000文字以内で送信してください。');return;}
+ const items=currentQueue();sendQueues.set(selected,items);
+ if(editingQueued){const item=items.find(item=>item.id===editingQueued);if(item)item.message=message;editingQueued=null;}
+ else{if(items.length>=20){notice('送信待ちは20件までです。少し待ってから追加してください。');return;}items.push({id:crypto.randomUUID(),message});}
+ $('message').value='';$('message').style.height='auto';updateComposer();scheduleQueue();
+};
 $('message').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('message').oninput=()=>{$('message').style.height='auto';$('message').style.height=Math.min($('message').scrollHeight,180)+'px';};
-$('stop').onclick=async()=>{try{await rpc('abort',{sessionKey:selected,runId});await loadHistory();}catch(e){notice(e.message);}};
+$('stop').onclick=async()=>{queuePauses.set(selected,'応答を停止しました。待機中のメッセージは再開するまで送信しません。');updateComposer();try{await rpc('abort',{sessionKey:selected,runId});await loadHistory();}catch(e){notice(e.message);}};
 async function showLine(){const ready=connected&&selected&&$('line-dialog').dataset.enabled==='true';$('line-description').textContent=!connected?'まずPCに接続してください。':!selected?'会話一覧から、続けたい会話を選択してください。':!ready?'LINEボットは設定中です。PC側でMessaging APIの設定が完了すると連携できます。':`「${$('conversation-title').textContent}」の続きをLINEで話せます。`;$('line-details').hidden=!ready;$('pair-box').hidden=true;if(!$('line-dialog').open)$('line-dialog').showModal();}
 for(const id of ['line-open','welcome-line'])$(id).onclick=showLine;
 $('pair-create').onclick=async()=>{try{const r=await rpc('pair',{sessionKey:selected});$('pair-code').textContent=r.code;$('pair-box').hidden=false;}catch(e){$('line-description').textContent=e.message;}};
