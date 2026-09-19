@@ -36,6 +36,10 @@ export function createRoom(){
  emotionAtlas.onload=()=>root.classList.toggle('has-emotions',true);
  emotionAtlas.onerror=()=>root.classList.toggle('has-emotions',false);
  emotionAtlas.src='/room-emotions.png';
+ const joyAtlas=document.createElement('img');
+ joyAtlas.onload=()=>root.classList.toggle('has-joy',true);
+ joyAtlas.onerror=()=>root.classList.toggle('has-joy',false);
+ joyAtlas.src='/room-emotion-joy.png';
  function soundLabel(){soundButton.textContent=soundOn?'音 ON':'音 OFF';soundButton.setAttribute('aria-label','文字送りの効果音');soundButton.setAttribute('aria-pressed',String(soundOn));}
  function unlock(){if(!active||!soundOn)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')void audio.resume().catch(()=>{});}catch{}}
  // Browsers require a user gesture before audio can start.
