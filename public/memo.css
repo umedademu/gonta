@@ -12,7 +12,7 @@
 .memo-open .memo-panel{visibility:visible;transition-delay:0s;border-left:1px solid var(--border)}
 .memo-sheet{height:100%;min-width:270px;padding:24px 26px 12px;display:flex;flex-direction:column;gap:14px}
 .memo-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px;flex-shrink:0}
-.memo-heading h2{font-size:15px;font-weight:550;margin:0;letter-spacing:.08em;white-space:nowrap}
+#memo-status{margin-left:auto}
 #memo-status{font-size:10px;color:var(--muted);text-align:right;line-height:1.7}
 #memo-status[data-state=offline],#memo-status[data-state=conflict],#memo-status[data-state=auth],#memo-status[data-state=size]{color:#a26c32}
 .memo-paper{flex:1;min-height:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:16px 0 8px;display:flex}
@@ -27,7 +27,6 @@
 [data-theme=dark] #memo-status[data-state=offline],[data-theme=dark] #memo-status[data-state=conflict],[data-theme=dark] #memo-status[data-state=auth],[data-theme=dark] #memo-status[data-state=size]{color:#d4b37e}
 .room-mode .memo-panel{background:#1b251f;color:#e1dfc9}
 .room-mode .memo-sheet{--border:#394a3b;--muted:#a2ae97}
-.room-mode .memo-heading h2{font-family:GontaPixel,monospace;color:#e6c58b}
 .room-mode .memo-toggle{background:#263329;border-color:#475844;color:#c7d2b6;border-radius:0}
 @media(min-width:901px) and (max-width:1200px){.memo-sheet{padding:20px 18px 12px}.memo-heading{align-items:flex-start;flex-direction:column;gap:4px}.memo-heading #memo-status{text-align:left}}
 @media(max-width:900px){
