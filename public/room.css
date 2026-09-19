@@ -50,6 +50,7 @@
 .room-emotion{display:none;position:absolute;left:37.344%;bottom:6%;width:25.3125%;aspect-ratio:1;pointer-events:none;background-image:url('/room-emotions.png');background-size:400% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(0 3px 0 #1b201d55);--emotion-start:0%;--emotion-end:33.333333%;--emotion-row:0%;background-position:var(--emotion-start) var(--emotion-row);animation:room-expression 1.2s steps(1,end) infinite}
 .pixel-room.has-emotions:not([data-emotion=neutral]) .room-emotion{display:block}
 .pixel-room.has-emotions:not([data-emotion=neutral]) .room-gonta{visibility:hidden}
+.pixel-room[data-emotion=joy] .room-emotion{background-image:url('/room-emotion-joy.png');background-size:600% 100%;animation:room-joy-expression 1.65s steps(1,end) infinite}
 .pixel-room[data-emotion=anger] .room-emotion{--emotion-start:66.666667%;--emotion-end:100%;animation-duration:.9s}
 .pixel-room[data-emotion=sadness] .room-emotion{--emotion-row:33.333333%;animation-duration:2s}
 .pixel-room[data-emotion=relaxed] .room-emotion{--emotion-row:33.333333%;--emotion-start:66.666667%;--emotion-end:100%;animation-duration:2.4s}
@@ -58,6 +59,7 @@
 .pixel-room[data-emotion=cheering] .room-emotion{--emotion-row:100%;animation-duration:.75s}
 .room-bubble{z-index:1}
 @keyframes room-expression{0%,100%{background-position:var(--emotion-start) var(--emotion-row)}50%{background-position:var(--emotion-end) var(--emotion-row)}}
+@keyframes room-joy-expression{0%,100%{background-position:0% 0%}19%{background-position:20% 0%}34%{background-position:40% 0%}43%{background-position:60% 0%}54%{background-position:80% 0%}83%{background-position:100% 0%}}
 @media(prefers-reduced-motion:reduce){.room-emotion{animation:none}}
 
 /* Give long messages the remaining viewport; keep the room as a small scene. */
