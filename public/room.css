@@ -4,18 +4,18 @@
 .room-thinking{font-size:11px;color:#adbca5;line-height:1.6;margin:8px 0 0}
 .pixel-room{max-width:940px;margin:0 auto;padding:20px 28px 16px;font-family:GontaPixel,monospace;color:#f4e9cb}
 .room-mode #welcome,.room-mode #messages{display:none!important}.room-mode #chat{background:#171e1b}
-.room-scene{position:relative;aspect-ratio:3/2;width:100%;max-height:380px;overflow:hidden;background:#3c4633;border:4px solid #76624b;box-shadow:0 0 0 2px #111710;isolation:isolate}
+.room-scene{position:relative;aspect-ratio:16/9;width:100%;max-height:380px;overflow:hidden;background:#3c4633;border:4px solid #76624b;box-shadow:0 0 0 2px #111710;isolation:isolate}
 .room-background{position:absolute;width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
-.room-worker{display:none;position:absolute;width:24%;aspect-ratio:1;background-size:200% 100%;background-repeat:no-repeat;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(0 3px 0 #1b201d55);animation:room-work .65s steps(1,end) infinite}
-.room-worker-pc{left:52%;bottom:38%;background-image:url('/room-work-pc.png')}
-.room-worker-obsidian{left:10%;bottom:28%;background-image:url('/room-work-obsidian.png')}
+.room-worker{display:none;position:absolute;width:20.25%;aspect-ratio:1;background-size:200% 100%;background-repeat:no-repeat;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(0 3px 0 #1b201d55);animation:room-work .65s steps(1,end) infinite}
+.room-worker-pc{left:53.875%;bottom:38%;background-image:url('/room-work-pc.png')}
+.room-worker-obsidian{left:11.875%;bottom:28%;background-image:url('/room-work-obsidian.png')}
 .pixel-room.is-searching .room-gonta,.pixel-room.is-pc-working .room-gonta{visibility:hidden}
 .pixel-room.is-searching .room-worker-obsidian,.pixel-room.is-pc-working .room-worker-pc{display:block}
 .pixel-room.is-searching .room-bubble{left:21%;bottom:72%;font-size:12px}
 .pixel-room.is-pc-working .room-bubble{left:72%;bottom:70%;font-size:12px}
 @keyframes room-work{0%,100%{background-position:0 0}50%{background-position:100% 0}}
 @media(prefers-reduced-motion:reduce){.room-worker{animation:none}}
-.room-gonta{position:absolute;width:24%;height:49%;object-fit:contain;bottom:9%;left:38%;image-rendering:pixelated;filter:drop-shadow(0 5px 0 #1b201d66);animation:room-idle 2.4s steps(2,end) infinite;transform-origin:bottom center}
+.room-gonta{position:absolute;width:20.25%;height:49%;object-fit:contain;bottom:9%;left:39.875%;image-rendering:pixelated;filter:drop-shadow(0 5px 0 #1b201d66);animation:room-idle 2.4s steps(2,end) infinite;transform-origin:bottom center}
 .room-bubble{position:absolute;bottom:60%;left:50%;transform:translateX(-50%);background:#fff0c9;color:#343824;border:3px solid #3c412c;box-shadow:3px 3px 0 #1b211f;font-size:20px;min-width:40px;text-align:center;padding:1px 8px}
 .room-bubble:after{content:'';position:absolute;width:8px;height:8px;background:#fff0c9;border-right:3px solid #3c412c;border-bottom:3px solid #3c412c;bottom:-8px;left:12px}
 .pixel-room.is-thinking .room-gonta{animation:room-think .8s steps(2,end) infinite}.pixel-room.is-talking .room-gonta{animation:room-talk .5s steps(2,end) infinite}
@@ -39,7 +39,7 @@
 @media(max-width:760px){.clock-bar{padding:6px 20px}.room-clock{top:8px;right:8px;font-size:11px;padding:5px 7px}.room-location{max-width:calc(100% - 218px)}}
 @media(max-width:420px){.room-clock{top:auto;bottom:8px;font-size:10px}.room-location{max-width:calc(100% - 16px)}}
 
-.room-worker-diary{left:0;top:auto;bottom:0;width:100%;aspect-ratio:3/2;background-image:url('/room-work-diary.png');filter:none;animation-duration:.9s}
+.room-worker-diary{left:37.344%;bottom:6%;width:25.3125%;background-image:url('/room-work-diary.png');animation-duration:.9s}
 .pixel-room.is-diary-writing .room-gonta{visibility:hidden}
 .pixel-room.is-diary-writing .room-worker-diary{display:block}
 .pixel-room.is-diary-writing .room-bubble{left:65%;bottom:55%;font-size:12px;z-index:1}
@@ -47,7 +47,7 @@
 .room-location{z-index:2}
 
 /* A 4-by-4 atlas: adjacent cells form a two-frame expression. */
-.room-emotion{display:none;position:absolute;left:35%;bottom:6%;width:30%;aspect-ratio:1;pointer-events:none;background-image:url('/room-emotions.png');background-size:400% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(0 3px 0 #1b201d55);--emotion-start:0%;--emotion-end:33.333333%;--emotion-row:0%;background-position:var(--emotion-start) var(--emotion-row);animation:room-expression 1.2s steps(1,end) infinite}
+.room-emotion{display:none;position:absolute;left:37.344%;bottom:6%;width:25.3125%;aspect-ratio:1;pointer-events:none;background-image:url('/room-emotions.png');background-size:400% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(0 3px 0 #1b201d55);--emotion-start:0%;--emotion-end:33.333333%;--emotion-row:0%;background-position:var(--emotion-start) var(--emotion-row);animation:room-expression 1.2s steps(1,end) infinite}
 .pixel-room.has-emotions:not([data-emotion=neutral]) .room-emotion{display:block}
 .pixel-room.has-emotions:not([data-emotion=neutral]) .room-gonta{visibility:hidden}
 .pixel-room[data-emotion=anger] .room-emotion{--emotion-start:66.666667%;--emotion-end:100%;animation-duration:.9s}
@@ -69,7 +69,7 @@ header{height:52px;padding:0 24px}
 .room-mode #room-sound{display:block}
 .main,#chat{min-height:0}
 .room-mode .pixel-room{display:flex;flex-direction:column;height:100%;min-height:440px;width:100%;padding:10px 24px;gap:10px}
-.room-mode .room-scene{flex:none;align-self:center;width:min(100%,calc(clamp(182px,31.2dvh,286px) * 1.5));max-height:none;aspect-ratio:3/2}
+.room-mode .room-scene{flex:none;align-self:center;width:min(100%,calc(clamp(182px,31.2dvh,286px) * 16 / 9));max-height:none;aspect-ratio:16/9}
 .room-mode .room-dialogue{display:flex;flex-direction:column;flex:1;min-height:220px;margin-top:0;padding:12px 16px}
 .room-mode .room-text{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}
 .room-dialogue-heading,.room-controls,.room-thinking{flex-shrink:0}
@@ -84,7 +84,7 @@ header{height:52px;padding:0 24px}
  #room-sound{font-size:10px;padding:4px 6px;min-height:30px}
  .connection-pill{padding:6px 7px}
  .room-mode .pixel-room{padding:8px 12px;gap:8px;min-height:400px}
- .room-mode .room-scene{width:min(100%,calc(clamp(156px,27.3dvh,221px) * 1.5))}
+ .room-mode .room-scene{width:calc(100% + 8px)}
  .room-mode .room-dialogue{padding:10px 12px}
  .room-mode footer{padding:5px 12px max(6px,env(safe-area-inset-bottom))}
  .room-clock{top:auto;bottom:6px;right:6px;font-size:10px;padding:3px 5px}
