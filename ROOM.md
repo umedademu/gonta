@@ -4,7 +4,7 @@
 
 ## Geminiなどで作り込む場合
 
-- `public/room-background.png`：部屋の背景。横長3:2、中央の手前にキャラを置ける空間を残します。現在は1536×1024。文字・キャラは描き込まないでください。
+- `public/room-background.png`：部屋の背景。横長16:9、中央の手前にキャラを置ける空間を残します。現在は1672×941。文字・キャラは描き込まないでください。
 - `public/room-gonta.png`：全身のゴンタ。背景透過PNG、緑の四角いメガネ・黒い毛・白い鼻先と胸。現在は1ポーズです。画像自体の透明領域を含め、中央配置してください。
 - `public/room.css`：キャラの位置・サイズ・揺れ方・RPG風会話枠。
 - `public/room.js`：表示モード・会話表示・文字送り。送信処理は既存の`public/app.js`を共用します。
@@ -12,6 +12,22 @@
 同名PNGを差し替えてGitHubへ反映すると、Vercelが再公開します。配置を変える場合はCSS/JSも調整してください。通常姿は1枚絵の上下動・傾き、作業姿は下記の横2コマ、表情は4×4のスプライトです。口パクや歩行のアニメーションはまだありません。
 
 日本語ドット文字には[DotGothic16](https://github.com/fontworks-fonts/DotGothic16)を同梱しています。ライセンスは`public/DotGothic16-OFL.txt`です。
+
+## 横長の部屋（2026-09-20）
+
+部屋の背景を16:9に描き直し、スマホでは左右8pxの余白まで広げました。PCでは従来の高さを目安に横幅を拡張しています。ゴンタと作業スプライトの縦横比は保ち、家具に合わせて位置を調整しました。日記作成用画像は背景込みの絵から透過スプライトに変更し、全ての状態で同じ横長の部屋を使います。
+
+`public/room-work-diary.png` は1774×887の透過PNG。横2コマ・各コマ正方形、中央に日記を書くゴンタを配置し、足元と縮尺を揃えます。CSSが0.9秒周期で切り替えます。
+
+以下の2点は組み込み `image_gen` ツールで生成しました。背景は旧 `room-background.png`、日記姿は旧 `room-work-diary.png` を参照しています。
+
+### 横長背景の最終プロンプト
+
+Use case: precise-object-edit. Asset type: pixel-art background for a retro chat room. Input image 1 is the room to redraw. Redraw this same cozy study as a wider 16:9 landscape composition, naturally revealing a little more space at left and right rather than stretching the furniture. Keep the warm wood, green rug, blue night window, chunky detailed pixel-art style and evening lighting. Preserve recognizable furniture and approximate interaction anchors: tall bookshelf occupies left 5–28% of the frame; window centered near 50%; desk and retro CRT computer at right, keyboard centered around x=73%, y=48%; green chair near right desk. The central foreground rug remains empty for a separately overlaid dog, with a clear sitting area at x=50%, y=78%. Slightly overhead straight-on game perspective, full room fills the canvas, 16:9 wide framing. No dog, no people, no characters, no text, no UI, no borders, no letterboxing. Opaque image.
+
+### 透過日記スプライトの最終プロンプト
+
+Use case: background-extraction. Asset type: two-frame pixel animation sprite atlas. Input image 1 shows Gonta writing his diary in two room frames; use the dog pose, identity and notebook as the edit target, remove the room entirely. Deliver only TWO full-body diary-writing dog sprites side-by-side on a genuinely TRANSPARENT alpha background in a 2:1 wide canvas. Each half is an equal square cell. Same cute black dog with green square glasses, white muzzle/chest/paws and white tail tip. Seated three-quarter front view looking down into the open purple diary, holding a yellow pencil. Left cell: pencil tip on page. Right cell: pencil and paw move a little across the page, tiny head nod. Keep camera, scale, whole body position and foot baseline locked across the two frames. Entire dog, ears, tail, notebook and pencil fit safely inside each cell, with 10% transparent margin; feet at 90% of each cell. Preserve the chunky retro pixel-art style, no smoothing. No furniture, no rug, no room, no extra props, no shadow outside dog, no text, no labels, no borders. Transparent background, not a checkerboard drawing.
 
 ## 返答に合わせた表情（2026-09-20）
 
@@ -36,7 +52,7 @@ Use case: stylized-concept. Asset type: production-ready emotion animation sprit
 
 OpenAIの組み込みimage_genツールで作成した試作用素材です。ゴンタの生成には既存の`public/gonta-profile.png`を参照画像として使用しました。
 
-### 背景の最終プロンプト
+### 初期背景の生成プロンプト（3:2版）
 
 Use case: stylized-concept. Asset type: background for a cozy retro Japanese RPG chat room. Create a wide landscape 3:2 pixel art interior, straight-on slightly top-down 8-bit game view, deliberately chunky pixel grid, limited warm ochre wood and muted forest green palette. Bookshelf on left, wooden desk and tiny retro computer on right, window showing blue evening sky in back, small warm desk lamp, wooden plank floor and large simple sage green rug in the middle foreground. Empty central rug with plenty of space for a separately overlaid dog sprite. Cozy intimate study, readable simple shapes. No characters, no text, no letters, no dialogue boxes, no UI, no gradients, no photorealism. Fill entire rectangular image.
 
@@ -66,7 +82,7 @@ OpenClawの `cron.list` を接続時・15秒ごと・cronイベント受信時�
 
 PC上でジョブ名・説明・指示文を判定し、Webには `{kind:'diary'}` のみ送る。cronの会話履歴や指示文は公開しない。日記表示はPC／Obsidian検索の作業姿より優先し、会話本文・返答の文字送りはそのまま。日記表示自体は無音。動きを減らす設定では静止画。
 
-素材 `public/room-work-diary.png` は背景込みの横2コマ、全体3:1・各コマ3:2。左右で部屋とゴンタの位置・大きさを揃え、鉛筆と手を少し動かす。CSSで0.9秒周期に切り替える。Geminiで差し替える場合も同じ構成にする。内蔵image_genで生成。
+初期素材 `public/room-work-diary.png` は背景込みの横2コマ、全体3:1・各コマ3:2でした。2026-09-20に上記の透過スプライトへ置き換えています。以下は初期素材の生成記録です。
 
 最終生成プロンプト:
 
