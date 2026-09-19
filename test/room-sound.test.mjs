@@ -71,6 +71,11 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   const emotion=()=>get('pixel-room').attributes['data-emotion'];
   const atlas=created.find(e=>e.src==='/room-emotions.png');
   atlas.onload();assert.ok(get('pixel-room').classes.has('has-emotions'));
+  const joyAtlas=created.find(e=>e.src==='/room-emotion-joy.png');
+  assert.equal(get('pixel-room').classes.has('has-joy'),false,'use the regular atlas until the cracker frames load');
+  joyAtlas.onload();assert.ok(get('pixel-room').classes.has('has-joy'));
+  joyAtlas.onerror();assert.equal(get('pixel-room').classes.has('has-joy'),false,'failed cracker image falls back to the regular atlas');
+  assert.ok(get('pixel-room').classes.has('has-emotions'),'other expressions remain available');
   messages.push({role:'user',text:'合格おめでとう！'});room.update({...state,runId:'emotion'});
   assert.equal(emotion(),'neutral','user wording never changes Gonta’s expression');
   room.update({...state,runId:'emotion',stream:'おめでとう！'});assert.equal(emotion(),'joy','stream drives the expression');
