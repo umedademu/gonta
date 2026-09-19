@@ -6,12 +6,13 @@ test('room sound follows newly revealed reply characters, never thinking or hist
  const names=['document','window','localStorage','matchMedia','setInterval','clearInterval'];
  const originals=new Map(names.map(n=>[n,Object.getOwnPropertyDescriptor(globalThis,n)]));
  const elements=new Map(),listeners=new Map(),intervals=new Map(),storage=new Map([['gonta.view','room']]);let sequence=0,notes=0;
- const element=()=>{const classes=new Set();return{textContent:'',hidden:false,classes,classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}},setAttribute(){},append(){},querySelector(){return element();}};};
+ const created=[];
+ const element=()=>{const classes=new Set(),attributes={};return{textContent:'',hidden:false,classes,attributes,classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}},setAttribute(k,v){attributes[k]=v;},append(){},querySelector(){return element();}};};
  const get=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
  const ticks=n=>{for(let i=0;i<n;i++)for(const cb of [...intervals.values()])cb();};
  const param={setValueAtTime(){},linearRampToValueAtTime(){}};
  try{
-  globalThis.document={hidden:false,body:element(),getElementById:get,createElement:()=>element(),addEventListener:(name,fn)=>listeners.set(name,fn)};
+  globalThis.document={hidden:false,body:element(),getElementById:get,createElement:()=>{const e=element();created.push(e);return e;},addEventListener:(name,fn)=>listeners.set(name,fn)};
   // Capture the dynamically inserted sound button.
   get('header-actions').append=button=>elements.set(button.id,button);
   globalThis.localStorage={getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)};
@@ -67,5 +68,23 @@ test('room sound follows newly revealed reply characters, never thinking or hist
   assert.equal(get('room-text').textContent,'こんに','completion preserves the reveal cursor');
   ticks(1);assert.equal(get('room-text').textContent,'こんにち');
   ticks(30);assert.equal(notes-noteCount,Array.from('こんにちは、私はゴンタです。').length,'each character sounds only once');
+  const emotion=()=>get('pixel-room').attributes['data-emotion'];
+  const atlas=created.find(e=>e.src==='/room-emotions.png');
+  atlas.onload();assert.ok(get('pixel-room').classes.has('has-emotions'));
+  messages.push({role:'user',text:'合格おめでとう！'});room.update({...state,runId:'emotion'});
+  assert.equal(emotion(),'neutral','user wording never changes Gonta’s expression');
+  room.update({...state,runId:'emotion',stream:'おめでとう！'});assert.equal(emotion(),'joy','stream drives the expression');
+  ticks(2);const revealed=get('room-text').textContent;
+  room.update({...state,runId:'emotion',stream:'おめでとう！',activity:{kind:'obsidian'}});
+  assert.equal(emotion(),'neutral','Obsidian work takes priority');assert.equal(get('room-text').textContent,revealed,'expression changes do not restart text');
+  room.update({...state,runId:'emotion',stream:'おめでとう！',activity:{kind:'pc'}});assert.equal(emotion(),'neutral','PC work takes priority');
+  room.update({...state,runId:'emotion',stream:'おめでとう！',backgroundActivity:{kind:'diary'}});assert.equal(emotion(),'neutral','diary work takes priority');
+  messages.push({role:'assistant',text:'おめでとう！'});room.update(state);assert.equal(emotion(),'joy','final reply preserves expression');
+  get('room-prev').onclick();assert.equal(emotion(),'neutral','user history stays neutral');
+  get('room-next').onclick();assert.equal(emotion(),'joy','assistant history uses its own tone');
+  room.update({...state,connected:false});assert.equal(emotion(),'neutral','disconnect resets expression');
+  room.update({...state,selected:'other',messages:[{role:'assistant',text:'ゆっくり休んでね。'}]});assert.equal(emotion(),'relaxed','session switch clears previous tone');
+  room.update({...state,selected:null});assert.equal(emotion(),'neutral','no selected conversation stays neutral');
+  atlas.onerror();assert.equal(get('pixel-room').classes.has('has-emotions'),false,'failed atlas retains original sprite');
  }finally{for(const [name,descriptor]of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });
