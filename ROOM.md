@@ -9,9 +9,28 @@
 - `public/room.css`：キャラの位置・サイズ・揺れ方・RPG風会話枠。
 - `public/room.js`：表示モード・会話表示・文字送り。送信処理は既存の`public/app.js`を共用します。
 
-同名PNGを差し替えてGitHubへ反映すると、Vercelが再公開します。スプライトシートに変える場合はCSS/JSも調整してください。通常姿は1枚絵の上下動・傾き、作業姿は下記の横2コマのスプライトです。口パクや歩行のアニメーションはまだありません。
+同名PNGを差し替えてGitHubへ反映すると、Vercelが再公開します。配置を変える場合はCSS/JSも調整してください。通常姿は1枚絵の上下動・傾き、作業姿は下記の横2コマ、表情は4×4のスプライトです。口パクや歩行のアニメーションはまだありません。
 
 日本語ドット文字には[DotGothic16](https://github.com/fontworks-fonts/DotGothic16)を同梱しています。ライセンスは`public/DotGothic16-OFL.txt`です。
+
+## 返答に合わせた表情（2026-09-20）
+
+ゴンタの返答本文からブラウザ内で表現を判定し、喜び・怒り・悲しみ・くつろぎ・共感・励まし・応援の7種類を切り替えます。ストリーミング中と過去の返答の閲覧にも対応します。ユーザーの発言、考え中、切断中は通常姿。日記作成・Obsidian検索・PC調査の作業アニメーションを優先します。文字送りと既存の効果音はそのまま使い、表情変更で最初から再生しません。
+
+判定は `public/room.js` の `classifyEmotion` にある日本語の表現ルールです。引用・コードを除外し、共感などの具体的な表現を優先します。文脈を完全に理解するものではなく、曖昧な返答は通常姿になります。会話への指示追加・別のAI呼び出し・本文へのラベル挿入はありません。判定表現はこの関数で追加できます。
+
+専用素材は `public/room-emotions.png`（透過PNG、1254×1254）。均等な4列×4行で、左から2コマずつの組です。各セルの大きさ・ゴンタの位置と縮尺・透明背景を維持すれば、Geminiなどで作り直した同名画像に差し替えられます。CSSの `room-expression` が2コマを切り替え、端末の「動きを減らす」設定では静止します。画像取得に失敗した場合は元の通常姿が残ります。
+
+| 行 | 左2コマ | 右2コマ |
+| --- | --- | --- |
+| 1 | 喜び | 怒り |
+| 2 | 悲しみ | くつろぎ |
+| 3 | 共感 | 励まし |
+| 4 | 応援 | 通常・まばたき（予備） |
+
+OpenAIの組み込み `image_gen` ツールで生成。参照画像は `public/room-gonta.png`。最終プロンプト:
+
+Use case: stylized-concept. Asset type: production-ready emotion animation sprite atlas for Gonta, a cozy Japanese retro RPG chatbot. Input image 1 is the character identity reference ONLY. Create a SINGLE SQUARE sprite sheet with EXACTLY 4 columns and 4 rows of equal square cells. 16 full-body pixel dog poses total, one dog in each cell. Gonta: black dog, white muzzle and chest, white paw tips, big green square glasses, brown eyes, upright round ears, white tail tip, chibi friendly proportions matching reference. Genuinely TRANSPARENT alpha background throughout; no checkerboard, no colored backdrop, no floor, no cast shadows, no labels, no letters, no grid lines or borders. Sharp chunky 8-bit pixel art, limited palette, no gradients. Each dog same scale, baseline at 88% of cell, centered within its own cell, entire dog and paws inside cell with 10% clear padding. Paired adjacent cells are two animation frames; subtly different paw/ear/tail poses, locked camera and scale. ROW 1 COL 1 and 2: JOY delighted closed smiling eyes, open happy mouth, tail wag left/right, small lifted forepaws. ROW 1 COL 3 and 4: ANGER mild protective indignation, eyebrows furrowed but not scary, planted feet then one paw stomp, mouth resolute. ROW 2 COL 1 and 2: SADNESS ears lowered, small downturned mouth, head bowed slightly left/right, subdued. ROW 2 COL 3 and 4: RELAXED contented smile, sitting at ease, head slightly tilting, relaxed half-closed eyes. ROW 3 COL 1 and 2: EMPATHY kind concerned eyebrows, ears soft, paw on chest then slow gentle nod, listening posture, no tear icon. ROW 3 COL 3 and 4: ENCOURAGEMENT warm reassuring smile, one forepaw reaching toward viewer then nearer chest, open supportive gesture. ROW 4 COL 1 and 2: CHEERING enthusiastic both forepaws raised then pumping one paw upward, cheerful grin and tail energetic; body remains same center and baseline for CSS bounce. ROW 4 COL 3 and 4: NEUTRAL ordinary calmly sitting dog, eyes open then blink. No extra props, no hearts or stars, no text. This must be a usable regular 4x4 transparent sprite atlas, with precisely equal cells and consistent full-body character identity.
 
 ## 画像生成の記録
 
