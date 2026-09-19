@@ -1,11 +1,13 @@
 import {createRoom} from './room.js';
 import {discover} from './discovery.js';
+import {createMemo} from './memo.js';
 const $=id=>document.getElementById(id);
 let activity=null,backgroundActivity=null;
 let historyReady=false,historyActive=false,editingQueued=null;
 const sendQueues=new Map(),queuePauses=new Map(),dispatches=new Map();
 let ws,connected=false,gatewayReady=false,selected=null,sessionList=[],messages=[],runId=null,stream='',intentional=false,reconnectTimer,requestCount=0,historyGeneration=0;
 const room=createRoom();
+const memo=createMemo();
 function updateRoom(){room.update({activity,backgroundActivity,connected,gatewayReady,selected,messages,runId,stream,sessionName:$('conversation-title').textContent});}
 const clockDate=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
 const clockTime=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
@@ -25,6 +27,7 @@ document.querySelector('#settings .field-note').textContent='接続先URLは空�
 $('relay-url').required=false;$('relay-url').placeholder='自動で最新の接続先を取得';
 const fragment=new URLSearchParams(location.hash.slice(1));
 if(fragment.get('relay')&&fragment.get('key')){credentials={url:fragment.get('relay'),key:fragment.get('key')};history.replaceState(null,'',location.pathname);}
+void memo.setCredential(credentials?.key);
 const notice=text=>{$('notice').textContent=text||'';$('notice').hidden=!text;};
 function showSettings(){ $('relay-url').value=credentials?.url||localStorage.getItem('gonta.relay')||(location.hostname==='127.0.0.1'||location.hostname==='localhost'?location.origin:'');$('passcode').value=credentials?.key||'';if(!$('settings').open)$('settings').showModal();}
 for(const id of ['settings-open','welcome-connect','connection-pill'])$(id).onclick=showSettings;
@@ -37,6 +40,7 @@ function rpc(method,params={}){if(!connected)return Promise.reject(Error('PCに�
 function websocketURL(value){const u=new URL(value);if(!['https:','http:','wss:','ws:'].includes(u.protocol)||u.username||u.password)throw Error('接続先URLを確認してください。');if(['http:','ws:'].includes(u.protocol)&&!['127.0.0.1','localhost','[::1]'].includes(u.hostname))throw Error('外部接続にはHTTPSのURLを指定してください。');u.protocol=['https:','wss:'].includes(u.protocol)?'wss:':'ws:';u.pathname='/ws';u.search='';u.hash='';return u.href;}
 async function proof(nonce,key){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(nonce)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function connect(c){
+ void memo.setCredential(c.key);
  const attempt=++connectionAttempt;
  clearTimeout(reconnectTimer);intentional=false;connected=false;if(ws){ws.onclose=null;ws.close();}
  credentials=c;historyReady=false;setStatus({});$('connect-error').textContent='接続先を確認しています…';$('connect-submit').disabled=true;
@@ -80,7 +84,7 @@ async function connect(c){
  current.onerror=()=>{};
 }
 $('connect-form').onsubmit=e=>{e.preventDefault();connect({url:$('relay-url').value.trim(),key:$('passcode').value.trim()});};
-$('disconnect').onclick=()=>{sendQueues.clear();queuePauses.clear();editingQueued=null;historyReady=false;historyActive=false;++connectionAttempt;intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');localStorage.removeItem('gonta.remembered');remember.checked=false;credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
+$('disconnect').onclick=()=>{void memo.setCredential(null);sendQueues.clear();queuePauses.clear();editingQueued=null;historyReady=false;historyActive=false;++connectionAttempt;intentional=true;clearTimeout(reconnectTimer);ws?.close();sessionStorage.removeItem('gonta.connection');localStorage.removeItem('gonta.relay');localStorage.removeItem('gonta.remembered');remember.checked=false;credentials=null;connected=false;selected=null;sessionList=[];messages=[];runId=null;stream='';$('passcode').value='';$('relay-url').value='';setStatus({});renderSessions();renderMessages();$('settings').close();$('welcome').hidden=false;$('conversation-title').textContent='会話のつづき';notice('');};
 async function refreshSessions(){sessionList=await rpc('sessions');renderSessions();}
 function displayName(s){return s.name.replace(/^\d+\s+(?=#)/,'');}
 function renderSessions(){const list=$('sessions');list.replaceChildren();const q=$('search').value.trim().toLowerCase();const filtered=sessionList.filter(s=>displayName(s).toLowerCase().includes(q));if(!filtered.length){const p=document.createElement('p');p.className='sidebar-empty';p.textContent=connected?'会話が見つかりません。':'接続すると会話がここに並びます。';list.append(p);}for(const s of filtered){const b=document.createElement('button');b.className='session'+(s.key===selected?' active':'');b.setAttribute('aria-current',s.key===selected?'true':'false');const strong=document.createElement('strong');strong.textContent=displayName(s);const small=document.createElement('small');small.textContent=(s.channel==='discord'?'◉ Discord':'▤ Web')+(s.hasActiveRun?' · 応答中':'');b.append(strong,small);b.onclick=()=>selectSession(s.key).catch(e=>notice(e.message));list.append(b);}}

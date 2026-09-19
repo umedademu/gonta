@@ -61,6 +61,19 @@ const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   return json(res,upstream.status,await upstream.json());
  }
+ if(url.pathname==='/api/memo'&&['GET','PUT','OPTIONS'].includes(req.method)){
+  let body;
+  if(req.method==='PUT'){
+   const chunks=[];let size=0;
+   for await(const chunk of req){size+=chunk.length;if(size>650000){json(res,413,{error:'Too large'});req.destroy();return;}chunks.push(chunk);}
+   body=Buffer.concat(chunks);
+  }
+  const headers={'Authorization':req.headers.authorization||'','Content-Type':'application/json'};
+  if(req.headers.origin)headers.Origin=req.headers.origin;
+  const upstream=await fetch('https://gonta-memo.umedademu.workers.dev/api/memo',{method:req.method,headers,body,signal:AbortSignal.timeout(12000)});
+  if(upstream.status===204){res.writeHead(204,{'Cache-Control':'no-store'});res.end();return;}
+  return json(res,upstream.status,await upstream.json());
+ }
  if(url.pathname==='/line/webhook'&&req.method==='POST'){
   if(!config.line?.secret)return json(res,503,{error:'LINE is not configured'});
   const chunks=[];let size=0;
@@ -71,7 +84,7 @@ const server=http.createServer(async(req,res)=>{
   json(res,200,{ok:true});void drain();return;
  }
  if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed'});
- const files={'/':'index.html','/app.js':'app.js','/discovery.js':'discovery.js','/theme.js':'theme.js','/room.js':'room.js','/room.css':'room.css','/room-background.png':'room-background.png','/room-gonta.png':'room-gonta.png','/room-emotions.png':'room-emotions.png','/room-emotion-joy.png':'room-emotion-joy.png','/room-work-pc.png':'room-work-pc.png','/room-work-diary.png':'room-work-diary.png','/room-work-obsidian.png':'room-work-obsidian.png','/DotGothic16-Regular.ttf':'DotGothic16-Regular.ttf','/DotGothic16-OFL.txt':'DotGothic16-OFL.txt','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
+ const files={'/':'index.html','/app.js':'app.js','/memo.js':'memo.js','/memo-state.js':'memo-state.js','/memo.css':'memo.css','/discovery.js':'discovery.js','/theme.js':'theme.js','/room.js':'room.js','/room.css':'room.css','/room-background.png':'room-background.png','/room-gonta.png':'room-gonta.png','/room-emotions.png':'room-emotions.png','/room-emotion-joy.png':'room-emotion-joy.png','/room-work-pc.png':'room-work-pc.png','/room-work-diary.png':'room-work-diary.png','/room-work-obsidian.png':'room-work-obsidian.png','/DotGothic16-Regular.ttf':'DotGothic16-Regular.ttf','/DotGothic16-OFL.txt':'DotGothic16-OFL.txt','/style.css':'style.css','/icon.svg':'icon.svg','/gonta-profile.png':'gonta-profile.png'};
  const file=files[url.pathname];if(!file)return json(res,404,{error:'Not found'});
  const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
  res.writeHead(200,{'Content-Type':types[path.extname(file)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://gonta-connect.umedademu.workers.dev wss: ws://127.0.0.1:* ws://localhost:*; base-uri 'none'; frame-ancestors 'none'"});res.end(req.method==='HEAD'?'':readFileSync(path.join(root,'public',file)));

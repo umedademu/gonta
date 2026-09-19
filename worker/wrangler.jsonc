@@ -1,0 +1,15 @@
+{
+  "name": "gonta-memo",
+  "main": "memo.mjs",
+  "account_id": "e878e7d1dd9c54ef4b351a14f66ecda8",
+  "compatibility_date": "2026-09-19",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gonta-memo",
+      "database_id": "5ec8e54a-17f3-4393-8d53-a3f9eb3c2bd1",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

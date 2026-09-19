@@ -11,7 +11,22 @@ OpenClawのDiscord会話を、WebとLINEから続ける個人用チャットア�
 
 WebとLINEはOpenClawの同じ`sessionKey`を使います。Discordの既存履歴を移行・統合する必要はありません。Webで送った内容はOpenClawの会話履歴に保存されますが、Discord画面へのメッセージの転載はしません。元のDiscordから続けると同じ文脈を利用します。
 
-## ローカル起動
+## メモ帳
+
+画面右端の「« メモ」で1枚のメモ帳を開きます。PCではゴンタ・発言枠・入力欄が一緒に左へ寄り、閉じると元の配置に戻ります。幅900px以下では会話とメモを切り替えます。会話を切り替えてもメモは共通です。
+
+入力を止めて約0.75秒後にCloudflare D1へ自動保存します。通信中断時の下書きは端末に残し、再接続時に同期します。複数画面の編集が衝突した場合は下書きを残し、どちらを保存するか表示します。上限は10万文字です。開閉状態も端末に記憶します。
+
+保存APIは専用Worker `gonta-memo`、保存先はD1 `gonta-memo` の1行です。Vercelの `/api/memo` から転送し、通常の接続キーから用途を分けて導出したトークンで認証します。WorkerにはそのSHA-256ハッシュをsecret `MEMO_TOKEN_HASH` として登録し、元の接続キーは送りません。PCが停止中でも、接続キーを保持した端末ならメモは利用できます。キーを変更した場合はWorkerのsecretも更新してください。
+
+```sh
+npx wrangler d1 execute gonta-memo --remote --config worker/wrangler.jsonc --file worker/migrations/0001_memo.sql
+npx wrangler deploy --config worker/wrangler.jsonc --secrets-file /secure/path/memo-secrets.json
+```
+
+secretのJSONは `{"MEMO_TOKEN_HASH":"SHA256(SHA256('gonta.memo.v1:' + 接続キー)の小文字hex文字列)の小文字hex文字列"}`。実際の値や接続キーはコミットしないでください。認証なしの読み書きは禁止しています。
+
+## ローカル起動手順
 
 Node.js 22.16以上と、稼働中のOpenClaw 2026.8.2（wire protocol 4）が必要です。
 
