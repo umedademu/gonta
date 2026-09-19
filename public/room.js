@@ -1,3 +1,25 @@
+// Presentation only: never send emotion labels back into the conversation.
+export function classifyEmotion(reply=''){
+ const text=String(reply)
+  .replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g,'')
+  .replace(/`[^`\n]*(?:`|$)/g,'')
+  .replace(/^\s*>.*$/gm,'')
+  .replace(/[「『“"][^」』”"\n]*[」』”"]/g,'')
+  .replace(/(?:嬉しく|うれしく|楽しく|悲しく|寂しく|さみしく|つらく|辛く|しんどく)(?:は)?(?:ない|ありません)/g,'')
+  .replace(/(?:大丈夫|嬉しい|うれしい|楽しい|悲しい|寂しい|応援|許せない)(?:と(?:は)?(?:言えない|思わない)|わけではない)/g,'');
+ // Specific supportive phrases take precedence over a generic happy ending.
+ const rules=[
+  ['empathy',/つらかった|辛かった|しんどかった|苦しかった|大変だったね|大変でしたね|その気持ち.{0,12}(?:わかる|分かる|わかります|分かります)|話してくれてありがとう|気持ちに寄り添/],
+  ['anger',/それは(?:本当に)?(?:理不尽|ひどい|酷い)|納得いかないね|許せない(?:ね|よ|です|[！!。])/],
+  ['sadness',/(?:悲しい|寂しい|さみしい|切ない)(?:ね|ですね|よ|な|気持ち|[。…])|残念だったね|残念でしたね/],
+  ['cheering',/応援(?:してる|している|しています|するよ)|(?:がんばれ|頑張れ|ファイト)(?:[！!。\s]|$)|いけるぞ/],
+  ['encouragement',/きっと大丈夫|大丈夫(?:だよ|ですよ)|焦らなく(?:て|ても)|あせらなく(?:て|ても)|無理しなく(?:て|ても)|一歩ずつ|少しずつ(?:で|進|やって)|あなたならできる|君ならできる/],
+  ['joy',/おめでとう|やった(?:ね|ー|！|!)|よく(?:頑張った|がんばった)|嬉しい|うれしい|すごいね|素晴らしいね|最高だね|楽しみだね/],
+  ['relaxed',/おやすみ|ゆっくり(?:休|やす)|のんびり(?:し|過ご)|ほっと(?:する|した|したね|ひと息)|一息つこ|ひと息つこ|穏やかな/],
+ ];
+ return rules.find(([,pattern])=>pattern.test(text))?.[0]||'neutral';
+}
+
 export function createRoom(){
  const $=id=>document.getElementById(id),root=$('pixel-room');
  const reduce=matchMedia('(prefers-reduced-motion: reduce)');
@@ -7,6 +29,13 @@ export function createRoom(){
  const soundButton=document.createElement('button');soundButton.id='room-sound';soundButton.type='button';
  $('header-actions').append(soundButton);
  for(const kind of ['pc','obsidian','diary']){const sprite=document.createElement('div');sprite.className=`room-worker room-worker-${kind}`;sprite.setAttribute('aria-hidden','true');root.querySelector('.room-scene').append(sprite);}
+ const emotionSprite=document.createElement('div');emotionSprite.className='room-emotion';emotionSprite.setAttribute('role','img');root.querySelector('.room-scene').append(emotionSprite);
+ const emotionNames={neutral:'いつものゴンタ',joy:'うれしそうなゴンタ',anger:'憤るゴンタ',sadness:'悲しそうなゴンタ',relaxed:'くつろぐゴンタ',empathy:'気持ちに寄り添うゴンタ',encouragement:'励ますゴンタ',cheering:'応援するゴンタ'};
+ // Keep the original sprite until the atlas is available, including on a failed download.
+ const emotionAtlas=document.createElement('img');
+ emotionAtlas.onload=()=>root.classList.toggle('has-emotions',true);
+ emotionAtlas.onerror=()=>root.classList.toggle('has-emotions',false);
+ emotionAtlas.src='/room-emotions.png';
  function soundLabel(){soundButton.textContent=soundOn?'音 ON':'音 OFF';soundButton.setAttribute('aria-label','文字送りの効果音');soundButton.setAttribute('aria-pressed',String(soundOn));}
  function unlock(){if(!active||!soundOn)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')void audio.resume().catch(()=>{});}catch{}}
  // Browsers require a user gesture before audio can start.
@@ -53,6 +82,9 @@ export function createRoom(){
   const entry=entries[position];
   const replying=!!waiting&&!!state.stream;
   const text=!online?'おかえり。まずは右上の接続ボタンから、PCにつないでね。':!state.selected?'会話を選ぶと、ここで続きを話せるよ。':replying?state.stream:entry?.text||'おかえり！ 今日はどんな話をしようか。下の入力欄から話しかけてね。';
+  const canEmote=online&&state.selected&&!diaryWork&&!searching&&!pcWork&&(!waiting||replying)&&(replying||entry?.role==='assistant');
+  const emotion=canEmote?classifyEmotion(text):'neutral';
+  root.setAttribute('data-emotion',emotion);emotionSprite.setAttribute('aria-label',emotionNames[emotion]);
   $('room-speaker').textContent=entry?.role==='user'&&!replying?'あなた':'ゴンタ';
   $('room-thinking').textContent=toolSearch?'Obsidianのノートを調べています…':toolKind==='pc'?'PC内のファイルを確認しています…':searchHint||pcWork?'調べものをお願いしています…':'ゴンタが考え中…';
   $('room-thinking').hidden=!waiting||(replying&&!toolKind);
