@@ -30,10 +30,9 @@
     <button id="memo-toggle" class="memo-toggle" type="button" aria-controls="memo-panel" aria-expanded="false" aria-label="メモ帳を開く"><span id="memo-chevron" aria-hidden="true">«</span><span class="memo-toggle-label" aria-hidden="true">メモ</span></button>
     <aside id="memo-panel" class="memo-panel" aria-label="メモ帳" aria-hidden="true" inert>
      <div class="memo-sheet">
-      <div class="memo-heading"><span id="memo-status" role="status" aria-live="polite"></span></div>
       <div id="memo-conflict" class="memo-conflict" hidden><p>この端末の下書きを残しています。保存する内容を選んでください。</p><details><summary>保存済みの内容を見る</summary><pre id="memo-remote"></pre></details><div class="memo-conflict-actions"><button id="memo-use-draft" type="button">この下書きを保存</button><button id="memo-use-remote" type="button">保存済みの内容を使う</button></div></div>
       <div class="memo-paper"><label for="memo-editor" class="sr-only">メモの内容</label><textarea id="memo-editor" placeholder="考えたこと、覚えておきたいことを…" maxlength="100000" spellcheck="false" disabled></textarea></div>
-      <div class="memo-foot"><span>自動保存</span><span id="memo-count">0 文字</span></div>
+      <div class="memo-foot"><span>自動保存</span><span id="memo-status" role="status" aria-live="polite"></span><span id="memo-count">0 文字</span></div>
      </div>
     </aside>
    </div>
