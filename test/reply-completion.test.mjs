@@ -24,7 +24,7 @@ test('new stream data invalidates older history requests',async()=>{
  await vm.runInNewContext(`(async()=>{${handler}})()`,context);
  assert.equal(context.historyGeneration,4);assert.equal(context.stream,'続き');
 });
-const history=app.slice(app.indexOf('async function loadHistory('),app.indexOf('\nasync function newChat('));
+const history=app.slice(app.indexOf('async function loadHistory('),app.indexOf('\nfunction renderText('));
 test('history keeps a newer stream and can still recover a missed completion',async()=>{
  let renders=0;
  const context={selected:'one',queuePauses:new Map(),dispatches:new Map(),scheduleQueue(){},historyGeneration:0,runId:'run',stream:'こんにちは、私はゴンタ',messages:[],notice(){},renderMessages(){renders++;},updateComposer(){},rpc:async()=>({messages:[],inFlightRun:{runId:'run',text:'こんにちは'}})};
