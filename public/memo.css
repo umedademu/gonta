@@ -11,6 +11,13 @@
 .memo-panel{min-width:0;min-height:0;overflow:hidden;background:#f2f4ed;visibility:hidden;transition:visibility 0s .46s}
 .memo-open .memo-panel{visibility:visible;transition-delay:0s;border-left:1px solid var(--border)}
 .memo-sheet{height:100%;min-width:270px;padding:10px 26px 12px;display:flex;flex-direction:column;gap:10px}
+.memo-tabs{display:flex;gap:4px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:6px}
+.memo-tabs button{position:relative;flex:1;min-width:0;padding:10px 2px;font-size:12px;white-space:nowrap;color:var(--muted);border:1px solid transparent;border-radius:5px}
+.memo-tabs button:hover{color:inherit;border-color:var(--border)}
+.memo-tabs button[aria-selected=true]{color:inherit;background:#81986a22;border-color:var(--border);font-weight:600}
+.memo-tabs button:focus-visible{outline-offset:-2px}
+.memo-tabs button[data-pending=true]::after{content:'';position:absolute;bottom:3px;left:calc(50% - 2px);width:4px;height:4px;border-radius:50%;background:currentColor}
+.memo-page{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0}
 #memo-status{min-width:0;font-size:10px;color:var(--muted);line-height:1.7}
 #memo-status[data-state=offline],#memo-status[data-state=conflict],#memo-status[data-state=auth],#memo-status[data-state=size]{color:#a26c32}
 .memo-paper{flex:1;min-height:0;border-bottom:1px solid var(--border);padding:0 0 8px;display:flex}

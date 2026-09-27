@@ -13,18 +13,21 @@ WebとLINEはOpenClawの同じ`sessionKey`を使います。Discordの既存履�
 
 ## メモ帳
 
-画面右端の「« メモ」で1枚のメモ帳を開きます。PCではゴンタ・発言枠・入力欄が一緒に左へ寄り、閉じると元の配置に戻ります。幅900px以下では会話とメモを切り替えます。会話を切り替えてもメモは共通です。
+画面右端の「« メモ」でメモ帳を開き、「メモ1〜5」のタブで最大5つのメモを切り替えます。既存のメモと端末の下書きはメモ1に引き継ぎます。タブは左右矢印・Home・Endキーでも切り替えられます。PCではゴンタ・発言枠・入力欄が一緒に左へ寄り、閉じると元の配置に戻ります。幅900px以下では会話とメモを切り替えます。会話を切り替えてもメモは共通です。
 
-入力を止めて約0.75秒後にCloudflare D1へ自動保存します。通信中断時の下書きは端末に残し、再接続時に同期します。複数画面の編集が衝突した場合は下書きを残し、どちらを保存するか表示します。上限は10万文字です。開閉状態も端末に記憶します。
+入力を止めて約0.75秒後にCloudflare D1へ自動保存します。保存や下書き、競合の管理はメモごとに独立し、切り替え前のメモも保存を続けます。通信中断時の下書きは端末に残し、再接続時に同期します。同じメモを複数画面で編集して衝突した場合は下書きを残し、どちらを保存するか表示します。未同期の変更があるタブには点を表示します。上限は各メモ10万文字です。開閉状態と選択中のタブも端末に記憶します。
 
-保存APIは専用Worker `gonta-memo`、保存先はD1 `gonta-memo` の1行です。Vercelの `/api/memo` から転送し、通常の接続キーから用途を分けて導出したトークンで認証します。WorkerにはそのSHA-256ハッシュをsecret `MEMO_TOKEN_HASH` として登録し、元の接続キーは送りません。PCが停止中でも、接続キーを保持した端末ならメモは利用できます。キーを変更した場合はWorkerのsecretも更新してください。
+保存APIは専用Worker `gonta-memo`、保存先はD1 `gonta-memo` の5行です。Vercelの `/api/memo?id=1`〜`5` から転送し、ID省略時は従来どおりメモ1を扱います。通常の接続キーから用途を分けて導出したトークンで認証します。WorkerにはそのSHA-256ハッシュをsecret `MEMO_TOKEN_HASH` として登録し、元の接続キーは送りません。PCが停止中でも、接続キーを保持した端末ならメモは利用できます。キーを変更した場合はWorkerのsecretも更新してください。
 
 ```sh
 npx wrangler d1 execute gonta-memo --remote --config worker/wrangler.jsonc --file worker/migrations/0001_memo.sql
+npx wrangler d1 execute gonta-memo --remote --config worker/wrangler.jsonc --file worker/migrations/0002_memo_tabs.sql
 npx wrangler deploy --config worker/wrangler.jsonc --secrets-file /secure/path/memo-secrets.json
 ```
 
 secretのJSONは `{"MEMO_TOKEN_HASH":"SHA256(SHA256('gonta.memo.v1:' + 接続キー)の小文字hex文字列)の小文字hex文字列"}`。実際の値や接続キーはコミットしないでください。認証なしの読み書きは禁止しています。
+
+既存環境では `0002_memo_tabs.sql` を一度だけ適用し、Worker、Web画面の順に更新します。PCのローカル画面を使う場合は、クエリパラメータの転送に対応したブリッジも再起動してください。
 
 ## ローカル起動手順
 

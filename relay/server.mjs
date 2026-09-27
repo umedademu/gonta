@@ -70,7 +70,7 @@ const server=http.createServer(async(req,res)=>{
   }
   const headers={'Authorization':req.headers.authorization||'','Content-Type':'application/json'};
   if(req.headers.origin)headers.Origin=req.headers.origin;
-  const upstream=await fetch('https://gonta-memo.umedademu.workers.dev/api/memo',{method:req.method,headers,body,signal:AbortSignal.timeout(12000)});
+  const upstream=await fetch('https://gonta-memo.umedademu.workers.dev/api/memo'+url.search,{method:req.method,headers,body,signal:AbortSignal.timeout(12000)});
   if(upstream.status===204){res.writeHead(204,{'Cache-Control':'no-store'});res.end();return;}
   return json(res,upstream.status,await upstream.json());
  }

@@ -1,13 +1,21 @@
-import {MAX_MEMO_LENGTH, MemoState, memoToken} from './memo-state.js';
+import {MAX_MEMO_LENGTH, MAX_MEMOS, MemoState, memoToken} from './memo-state.js';
 
 export function createMemo() {
   const $ = id => document.getElementById(id);
   const panel = $('memo-panel'), editor = $('memo-editor'), toggle = $('memo-toggle');
   const narrow = matchMedia('(max-width: 900px)');
-  let state = new MemoState(), token = '', storageKey = '', passcode = null;
-  let generation = 0, timer, busy = false, composing = false, localOK = true, cached = false, status = 'locked';
+  const freshNotes = () => Array.from({length:MAX_MEMOS}, (_, index) => ({
+    id:index + 1, state:new MemoState(), storageKey:'', timer:null,
+    busy:false, composing:false, localOK:true, cached:false, status:'locked',
+    selection:[0,0,'none'], scrollTop:0
+  }));
+  let notes = freshNotes(), active = 0, token = '', passcode = null, generation = 0;
   let opened = false;
-  try { opened = localStorage.getItem('gonta.memo.open') === 'true'; } catch {}
+  try {
+    opened = localStorage.getItem('gonta.memo.open') === 'true';
+    const saved = Number(localStorage.getItem('gonta.memo.active'));
+    if (Number.isInteger(saved) && saved >= 0 && saved < MAX_MEMOS) active = saved;
+  } catch {}
 
   function layout(focus = false) {
     document.body.classList.toggle('memo-open', opened);
@@ -24,20 +32,24 @@ export function createMemo() {
     opened = !opened;
     try { localStorage.setItem('gonta.memo.open', String(opened)); } catch {}
     layout(true);
-    if (opened) void sync();
+    if (opened) syncPending();
   };
   panel.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { opened = false; layout(); toggle.focus(); try { localStorage.setItem('gonta.memo.open', 'false'); } catch {} }
+    if (event.key === 'Escape' && !event.isComposing && !notes[active].composing) {
+      opened = false; layout(); toggle.focus();
+      try { localStorage.setItem('gonta.memo.open', 'false'); } catch {}
+    }
   });
   narrow.addEventListener('change', () => layout());
   layout();
 
-  function persist() {
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, JSON.stringify(state.snapshot())); localOK = true; cached = true; }
-    catch { localOK = false; }
+  function persist(note) {
+    if (!note.storageKey) return;
+    try { localStorage.setItem(note.storageKey, JSON.stringify(note.state.snapshot())); note.localOK = true; note.cached = true; }
+    catch { note.localOK = false; }
   }
   function render() {
+    const {state, status, composing, cached, localOK} = notes[active];
     // Avoid resetting the caret, selection, undo stack, or an IME composition.
     if (!composing && editor.value !== state.content) editor.value = state.content;
     editor.disabled = !token || status === 'auth' || (!state.loaded && !cached && !state.dirty);
@@ -51,86 +63,132 @@ export function createMemo() {
     $('memo-status').textContent = labels[state.conflict ? 'conflict' : status] || '';
     $('memo-status').dataset.state = state.conflict ? 'conflict' : status;
     $('memo-conflict').hidden = !state.conflict;
-    if (state.conflict) $('memo-remote').textContent = state.conflict.content || '（空のメモ）';
+    $('memo-remote').textContent = state.conflict ? (state.conflict.content || '（空のメモ）') : '';
     $('memo-count').textContent = `${state.content.length.toLocaleString('ja-JP')} 文字`;
+    $('memo-page').setAttribute('aria-labelledby', `memo-tab-${active + 1}`);
+    $('memo-editor-label').textContent = `メモ${active + 1}の内容`;
+    notes.forEach((note, index) => {
+      const tab = $(`memo-tab-${note.id}`), selected = index === active;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      tab.dataset.pending = String(note.state.dirty || !!note.state.conflict);
+      tab.title = `メモ${note.id}${note.state.conflict ? ' · 保存する内容を選んでください' : note.state.dirty ? ' · 未同期の変更あり' : ''}`;
+    });
   }
-  function schedule(delay = 750) { clearTimeout(timer); timer = setTimeout(() => void sync(), delay); }
-  async function request(method, body, auth) {
-    const response = await fetch('/api/memo', {
+  function selectNote(index) {
+    const previous = notes[active];
+    if (index === active || previous.composing) return;
+    previous.selection = [editor.selectionStart, editor.selectionEnd, editor.selectionDirection];
+    previous.scrollTop = editor.scrollTop;
+    persist(previous);
+    void sync(previous);
+    active = index;
+    try { localStorage.setItem('gonta.memo.active', String(active)); } catch {}
+    render();
+    editor.setSelectionRange(...notes[active].selection);
+    editor.scrollTop = notes[active].scrollTop;
+    void sync(notes[active]);
+  }
+  for (let index = 0; index < MAX_MEMOS; index++) {
+    const tab = $(`memo-tab-${index + 1}`);
+    tab.onclick = () => selectNote(index);
+    tab.addEventListener('keydown', event => {
+      if (event.isComposing || notes[active].composing) return;
+      const next = {ArrowRight:(index + 1) % MAX_MEMOS, ArrowLeft:(index + MAX_MEMOS - 1) % MAX_MEMOS, Home:0, End:MAX_MEMOS - 1}[event.key];
+      if (next === undefined) return;
+      event.preventDefault(); selectNote(next); $(`memo-tab-${next + 1}`).focus();
+    });
+  }
+  function schedule(note, delay = 750) {
+    clearTimeout(note.timer); note.timer = setTimeout(() => void sync(note), delay);
+  }
+  async function request(id, method, body, auth) {
+    const response = await fetch(`/api/memo?id=${id}`, {
       method, cache:'no-store', headers:{Authorization:`Bearer ${auth}`, ...(body ? {'Content-Type':'application/json'} : {})},
       ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(12000)
     });
     if (response.status === 401) throw Object.assign(new Error('Unauthorized'), {auth:true});
     if (!response.ok && response.status !== 409) throw new Error('Memo unavailable');
     const data = await response.json();
-    if (typeof data.content !== 'string' || !Number.isSafeInteger(data.version)) throw new Error('Invalid memo');
+    // An old proxy/Worker may drop the id; never treat another tab as this memo.
+    if (!data || data.id !== id || typeof data.content !== 'string' || !Number.isSafeInteger(data.version)) throw new Error('Invalid memo');
     return {conflict:response.status === 409, data};
   }
-  async function sync() {
-    clearTimeout(timer);
-    if (!token || busy || composing || state.conflict || status === 'auth') return;
-    if (state.content.length > MAX_MEMO_LENGTH) { status = 'size'; render(); return; }
+  async function sync(note) {
+    clearTimeout(note.timer);
+    const {state} = note;
+    if (!token || note.busy || note.composing || state.conflict || note.status === 'auth') return;
+    if (state.content.length > MAX_MEMO_LENGTH) { note.status = 'size'; render(); return; }
     const current = generation, auth = token;
-    busy = true;
+    note.busy = true;
     try {
       if (!state.loaded || !state.dirty) {
-        status = state.loaded ? status : 'loading'; render();
-        const result = await request('GET', null, auth);
+        note.status = state.loaded ? note.status : 'loading'; render();
+        const result = await request(note.id, 'GET', null, auth);
         if (current !== generation) return;
-        state.accept(result.data); persist(); render();
+        state.accept(result.data); persist(note); render();
       }
-      if (state.dirty && !state.conflict && !composing) {
+      if (state.dirty && !state.conflict && !note.composing) {
         const sent = state.content;
-        status = 'saving'; render();
-        const result = await request('PUT', {content:sent, version:state.version}, auth);
+        note.status = 'saving'; render();
+        const result = await request(note.id, 'PUT', {content:sent, version:state.version}, auth);
         if (current !== generation) return;
         if (result.conflict) state.accept(result.data);
         else state.acknowledge(result.data, sent);
-        persist();
+        persist(note);
       }
-      status = state.dirty ? 'draft' : 'saved';
+      note.status = state.dirty ? 'draft' : 'saved';
     } catch (error) {
       if (current !== generation) return;
-      status = error.auth ? 'auth' : 'offline';
+      note.status = error.auth ? 'auth' : 'offline';
       // Re-read the server before retrying an uncertain write.
       state.loaded = false;
     } finally {
       if (current === generation) {
-        busy = false; render();
-        if (status === 'offline') schedule(10000);
-        else if (state.dirty && !state.conflict && status !== 'auth') schedule();
+        note.busy = false; render();
+        if (note.status === 'offline') schedule(note, 10000);
+        else if (state.dirty && !state.conflict && note.status !== 'auth') schedule(note);
       }
     }
   }
-  function input() {
-    state.content = editor.value; persist(); status = 'draft'; render();
-    if (!composing) schedule();
+  function syncPending() {
+    notes.forEach((note, index) => { if (index === active || note.state.dirty) void sync(note); });
   }
-  editor.addEventListener('compositionstart', () => { composing = true; clearTimeout(timer); });
-  editor.addEventListener('compositionend', () => { composing = false; input(); });
+  function input() {
+    const note = notes[active];
+    note.state.content = editor.value; persist(note); note.status = 'draft'; render();
+    if (!note.composing) schedule(note);
+  }
+  editor.addEventListener('compositionstart', () => { const note = notes[active]; note.composing = true; clearTimeout(note.timer); });
+  editor.addEventListener('compositionend', () => { notes[active].composing = false; input(); });
   editor.addEventListener('input', input);
-  editor.addEventListener('blur', () => { if (!composing) void sync(); });
+  editor.addEventListener('blur', () => { if (!notes[active].composing) void sync(notes[active]); });
   for (const [id, useDraft] of [['memo-use-draft',true], ['memo-use-remote',false]]) {
     $(id).onclick = () => {
-      state.resolve(useDraft); persist(); status = state.dirty ? 'draft' : 'saved'; render();
-      if (state.dirty) void sync();
+      const note = notes[active];
+      note.state.resolve(useDraft); persist(note); note.status = note.state.dirty ? 'draft' : 'saved'; render();
+      if (note.state.dirty) void sync(note);
     };
   }
-  window.addEventListener('online', () => void sync());
-  window.addEventListener('focus', () => { if (opened) void sync(); });
-  document.addEventListener('visibilitychange', () => { if (state.dirty || (opened && !document.hidden)) void sync(); });
-  window.addEventListener('beforeunload', event => {
-    if (state.dirty && !localOK) { event.preventDefault(); event.returnValue = ''; }
+  window.addEventListener('online', syncPending);
+  window.addEventListener('focus', () => { if (opened) syncPending(); });
+  document.addEventListener('visibilitychange', () => {
+    notes.forEach((note, index) => { if (note.state.dirty || (index === active && opened && !document.hidden)) void sync(note); });
   });
-  setInterval(() => { if (opened && !document.hidden && !composing) void sync(); }, 30000);
+  window.addEventListener('beforeunload', event => {
+    if (notes.some(note => note.state.dirty && !note.localOK)) { event.preventDefault(); event.returnValue = ''; }
+  });
+  setInterval(() => { if (opened && !document.hidden) syncPending(); }, 30000);
   render();
 
   return {async setCredential(key) {
     if ((key || null) === passcode) return;
-    persist(); clearTimeout(timer);
+    notes.forEach(note => { persist(note); clearTimeout(note.timer); });
     const current = ++generation;
-    passcode = key || null; token = ''; storageKey = ''; busy = false; cached = false; composing = false;
-    state = new MemoState(); status = key ? 'loading' : 'locked'; render();
+    passcode = key || null; token = '';
+    notes = freshNotes();
+    notes.forEach(note => { note.status = key ? 'loading' : 'locked'; });
+    render();
     if (!key) return;
     const derived = await memoToken(key);
     if (current !== generation) return;
@@ -138,10 +196,15 @@ export function createMemo() {
     const cacheId = await memoToken(derived);
     if (current !== generation) return;
     token = derived;
-    storageKey = 'gonta.memo.draft.' + cacheId;
-    let draft;
-    try { draft = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch {}
-    cached = typeof draft?.content === 'string';
-    state = new MemoState(draft); render(); void sync();
+    notes.forEach(note => {
+      // Keep the original cache key for tab 1, including unsynced offline drafts.
+      note.storageKey = 'gonta.memo.draft.' + cacheId + (note.id === 1 ? '' : `.${note.id}`);
+      let draft;
+      try { draft = JSON.parse(localStorage.getItem(note.storageKey) || 'null'); } catch {}
+      note.cached = typeof draft?.content === 'string';
+      note.state = new MemoState(draft);
+    });
+    render();
+    notes.forEach(note => void sync(note));
   }};
 }

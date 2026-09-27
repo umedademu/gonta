@@ -1,4 +1,5 @@
 export const MAX_MEMO_LENGTH = 100000;
+export const MAX_MEMOS = 5;
 export async function memoToken(passcode) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('gonta.memo.v1:' + passcode));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');

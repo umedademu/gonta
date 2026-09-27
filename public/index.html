@@ -22,9 +22,18 @@
     <button id="memo-toggle" class="memo-toggle" type="button" aria-controls="memo-panel" aria-expanded="false" aria-label="メモ帳を開く"><span id="memo-chevron" aria-hidden="true">«</span><span class="memo-toggle-label" aria-hidden="true">メモ</span></button>
     <aside id="memo-panel" class="memo-panel" aria-label="メモ帳" aria-hidden="true" inert>
      <div class="memo-sheet">
+      <div id="memo-tabs" class="memo-tabs" role="tablist" aria-label="メモ帳の切り替え">
+       <button id="memo-tab-1" type="button" role="tab" aria-selected="true" aria-controls="memo-page" tabindex="0">メモ1</button>
+       <button id="memo-tab-2" type="button" role="tab" aria-selected="false" aria-controls="memo-page" tabindex="-1">メモ2</button>
+       <button id="memo-tab-3" type="button" role="tab" aria-selected="false" aria-controls="memo-page" tabindex="-1">メモ3</button>
+       <button id="memo-tab-4" type="button" role="tab" aria-selected="false" aria-controls="memo-page" tabindex="-1">メモ4</button>
+       <button id="memo-tab-5" type="button" role="tab" aria-selected="false" aria-controls="memo-page" tabindex="-1">メモ5</button>
+      </div>
+      <div id="memo-page" class="memo-page" role="tabpanel" aria-labelledby="memo-tab-1">
       <div id="memo-conflict" class="memo-conflict" hidden><p>この端末の下書きを残しています。保存する内容を選んでください。</p><details><summary>保存済みの内容を見る</summary><pre id="memo-remote"></pre></details><div class="memo-conflict-actions"><button id="memo-use-draft" type="button">この下書きを保存</button><button id="memo-use-remote" type="button">保存済みの内容を使う</button></div></div>
-      <div class="memo-paper"><label for="memo-editor" class="sr-only">メモの内容</label><textarea id="memo-editor" placeholder="考えたこと、覚えておきたいことを…" maxlength="100000" spellcheck="false" disabled></textarea></div>
+      <div class="memo-paper"><label id="memo-editor-label" for="memo-editor" class="sr-only">メモ1の内容</label><textarea id="memo-editor" placeholder="考えたこと、覚えておきたいことを…" maxlength="100000" spellcheck="false" disabled></textarea></div>
       <div class="memo-foot"><span>自動保存</span><span id="memo-status" role="status" aria-live="polite"></span><span id="memo-count">0 文字</span></div>
+      </div>
      </div>
     </aside>
    </div>
