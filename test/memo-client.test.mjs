@@ -2,17 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {MemoState,memoToken,MAX_MEMO_LENGTH,MAX_MEMOS} from '../public/memo-state.js';
+import {MemoState,memoToken,MAX_MEMO_LENGTH,MAX_MEMOS,MAX_MEMO_TITLE_LENGTH} from '../public/memo-state.js';
 const source=readFileSync(new URL('../public/memo.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'').replace('export function','function');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(cache=new Map()) {
   const nodes=new Map(),timers=new Map(),events=new Map();let timerId=0;
-  const element=()=>({value:'',textContent:'',disabled:false,hidden:false,dataset:{},attrs:{},events:new Map(),selectionStart:0,selectionEnd:0,selectionDirection:'none',scrollTop:0,setSelectionRange(start,end,direction){this.selectionStart=start;this.selectionEnd=end;this.selectionDirection=direction;},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},addEventListener(k,fn){this.events.set(k,fn);},focus(){},inert:false});
+  const element=()=>({value:'',textContent:'',disabled:false,hidden:false,dataset:{},attrs:{},events:new Map(),selectionStart:0,selectionEnd:0,selectionDirection:'none',scrollTop:0,setSelectionRange(start,end,direction){this.selectionStart=start;this.selectionEnd=end;this.selectionDirection=direction;},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},addEventListener(k,fn){this.events.set(k,fn);},focus(){},select(){},inert:false});
   const $=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
-  const remotes=Array.from({length:MAX_MEMOS},(_,index)=>({content:index===0?'元のメモ':'',version:index===0?1:0}));
+  const remotes=Array.from({length:MAX_MEMOS},(_,index)=>({content:index===0?'元のメモ':'',title:'',version:index===0?1:0}));
   let mode='ok';const releases=[];
   const calls=[];
-  const context=vm.createContext({MemoState,memoToken,MAX_MEMO_LENGTH,MAX_MEMOS,AbortSignal,JSON,Error,Object,String,setInterval(){},
+  const context=vm.createContext({MemoState,memoToken,MAX_MEMO_LENGTH,MAX_MEMOS,MAX_MEMO_TITLE_LENGTH,AbortSignal,JSON,Error,Object,String,setInterval(){},
     setTimeout(fn,delay){const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout(id){timers.delete(id);},
     localStorage:{getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)},
     document:{getElementById:$,hidden:false,body:{classList:{toggle(){}}},addEventListener:(k,fn)=>events.set(k,fn)},
@@ -27,9 +27,9 @@ function setup(cache=new Map()) {
       if(options.method==='PUT'){
         const data=JSON.parse(options.body);
         if(data.version!==remote.version)status=409;
-        else remote=remotes[id-1]={content:data.content,version:remote.version+1};
+        else remote=remotes[id-1]={content:data.content,title:data.title??remote.title??'',version:remote.version+1};
       }
-      return {ok:status===200,status,json:async()=>({...remote,id:mode==='wrong-id'?1:id})};
+      return {ok:status===200,status,json:async()=>({title:'',...remote,id:mode==='wrong-id'?1:id})};
     }
   });
   vm.runInContext(source,context);
@@ -166,4 +166,83 @@ test('an outdated proxy that drops the tab id cannot overwrite tab 1',async()=>{
  assert.equal(t.$('memo-editor').disabled,true);
  assert.equal(t.calls.filter(call=>call.method==='PUT').length,0);
  assert.equal(t.remotes[0].content,'元のメモ');
+});
+
+const nameKey=(t,id,key,extra={})=>t.$(`memo-name-${id}`).events.get('keydown')({key,preventDefault(){},stopPropagation(){},...extra});
+const rename=(t,id,title)=>{t.$(`memo-tab-${id}`).events.get('dblclick')();t.$(`memo-name-${id}`).value=title;nameKey(t,id,'Enter');};
+
+test('double-click renames only its tab and blank names restore the default label',async()=>{
+ const t=setup();await t.ready();
+ rename(t,3,'  買い物 🐶  ');await t.flush();
+ assert.equal(t.remotes[2].title,'買い物 🐶');assert.equal(t.remotes[2].content,'');
+ assert.equal(t.$('memo-tab-3').textContent,'買い物 🐶');
+ assert.equal(t.$('memo-editor-label').textContent,'買い物 🐶の内容');
+ assert.equal(t.$('memo-name-3').hidden,true);assert.equal(t.$('memo-tab-3').hidden,false);
+ assert.equal(t.remotes[0].title,'');assert.equal(t.remotes[0].content,'元のメモ');
+ rename(t,3,'   ');await t.flush();
+ assert.equal(t.remotes[2].title,'');assert.equal(t.$('memo-tab-3').textContent,'メモ3');
+});
+
+test('rename supports F2, cancellation, touch fallback, blur confirmation, and IME Enter',async()=>{
+ const t=setup();await t.ready();
+ t.$('memo-tab-1').events.get('keydown')({key:'F2',preventDefault(){}});
+ assert.equal(t.$('memo-name-1').hidden,false);t.$('memo-name-1').value='取り消す名前';
+ nameKey(t,1,'Escape');await t.flush();assert.equal(t.remote.title,'');
+ t.$('memo-rename').onclick();t.$('memo-name-1').events.get('compositionstart')();
+ t.$('memo-name-1').value='変換中';nameKey(t,1,'Enter');
+ assert.equal(t.$('memo-name-1').hidden,false);assert.equal(t.remote.title,'');
+ t.$('memo-name-1').events.get('compositionend')();t.$('memo-name-1').value='仕事のメモ';
+ nameKey(t,1,'Enter',{keyCode:229});assert.equal(t.$('memo-name-1').hidden,false);
+ t.$('memo-name-1').events.get('blur')();await t.flush();
+ assert.equal(t.remote.title,'仕事のメモ');assert.equal(t.remote.content,'元のメモ');
+});
+
+test('a name edited during an in-flight body save is saved after that response',async()=>{
+ const t=setup();await t.ready();t.setMode('slow');t.input('保存中の本文');await t.flush();
+ rename(t,1,'後から変更した名前');await t.flush();
+ t.setMode('ok');t.release();await tick();await t.flush();
+ assert.equal(t.remote.content,'保存中の本文');assert.equal(t.remote.title,'後から変更した名前');
+ assert.equal(t.$('memo-tab-1').textContent,'後から変更した名前');
+ assert.equal(t.calls.filter(call=>call.method==='PUT').length,2);
+});
+
+test('offline name changes restore after reload and merge with a remote body edit',async()=>{
+ const t=setup();await t.ready();t.setMode('offline');rename(t,2,'外出先の下書き');await t.flush();
+ const restored=setup(t.cache);restored.setMode('offline');await restored.ready();
+ assert.equal(restored.$('memo-tab-2').textContent,'外出先の下書き');
+ restored.remotes[1]={title:'',content:'別端末で本文を追加',version:1};
+ restored.setMode('ok');restored.events.get('online')();await tick();await restored.flush();
+ assert.equal(restored.remotes[1].title,'外出先の下書き');
+ assert.equal(restored.remotes[1].content,'別端末で本文を追加');
+});
+
+test('conflicting names display the saved name and can use the remote version',async()=>{
+ const t=setup();await t.ready();rename(t,1,'この端末の名前');
+ t.remotes[0]={content:'元のメモ',title:'別端末の名前',version:2};await t.flush();
+ assert.equal(t.$('memo-conflict').hidden,false);
+ assert.equal(t.$('memo-remote-title').textContent,'名前：別端末の名前');
+ assert.equal(t.$('memo-tab-1').textContent,'この端末の名前');
+ t.$('memo-use-remote').onclick();await t.flush();
+ assert.equal(t.$('memo-tab-1').textContent,'別端末の名前');
+ assert.equal(t.$('memo-conflict').hidden,true);
+});
+
+test('names remain literal text and disconnect removes names and open rename fields',async()=>{
+ const t=setup();t.$('memo-tab-1').events.get('dblclick')();assert.equal(t.$('memo-name-1').hidden,true);
+ await t.ready();rename(t,1,'<img src=x onerror=alert(1)>');await t.flush();
+ assert.equal(t.$('memo-tab-1').textContent,'<img src=x onerror=alert(1)>');
+ t.$('memo-tab-1').events.get('dblclick')();
+ await t.api.setCredential(null);
+ assert.equal(t.$('memo-tab-1').textContent,'メモ1');assert.equal(t.$('memo-name-1').value,'');
+ assert.equal(t.$('memo-name-1').hidden,true);assert.equal(t.$('memo-rename').disabled,true);
+});
+
+test('opening and leaving a name untouched does not save or undo an incoming name',async()=>{
+ const t=setup();await t.ready();t.$('memo-rename').onclick();
+ t.$('memo-name-1').events.get('blur')();await t.flush();
+ assert.equal(t.calls.filter(call=>call.method==='PUT').length,0);
+ t.$('memo-rename').onclick();t.remotes[0]={content:'元のメモ',title:'別端末の最新名',version:2};
+ t.events.get('online')();await tick();t.$('memo-name-1').events.get('blur')();await t.flush();
+ assert.equal(t.$('memo-tab-1').textContent,'別端末の最新名');
+ assert.equal(t.calls.filter(call=>call.method==='PUT').length,0);
 });

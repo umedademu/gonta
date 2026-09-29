@@ -55,6 +55,7 @@ async function fixture(t) {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../worker/migrations/0001_memo.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../worker/migrations/0002_memo_tabs.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../worker/migrations/0003_memo_titles.sql',import.meta.url),'utf8'));
   t.after(() => db.close());
   const token = await memoToken('test-only-passcode-with-more-than-24-characters');
   const env = {MEMO_TOKEN_HASH:await tokenHash(token),DB:{prepare(sql){
@@ -145,4 +146,52 @@ test('memo ids are bounded to five slots and every slot requires authentication'
   assert.equal((await f.send('GET',undefined,{Authorization:''},`?id=${id}`)).status,401);
   assert.equal((await f.send('PUT',{content:'x',version:0},{Authorization:''},`?id=${id}`)).status,401);
  }
+});
+
+test('name and body edits merge independently, including legacy cached drafts',()=>{
+ const state=new MemoState({content:'本文の追記',base:'元の本文',version:1});
+ state.accept({content:'元の本文',title:'別端末で命名',version:2});
+ assert.equal(state.conflict,null);assert.equal(state.title,'別端末で命名');
+ assert.equal(state.content,'本文の追記');assert.equal(state.dirty,true);
+ state.acknowledge({version:3},'本文の追記','別端末で命名');
+ state.title='名前だけ変更';state.accept({content:'さらに本文追記',title:'別端末で命名',version:4});
+ assert.equal(state.conflict,null);assert.equal(state.content,'さらに本文追記');assert.equal(state.title,'名前だけ変更');
+ const restored=new MemoState(state.snapshot());
+ restored.accept({content:'さらに本文追記',title:'名前だけ変更',version:5});
+ assert.equal(restored.dirty,false);assert.equal(restored.version,5);
+});
+
+test('title migration preserves every existing memo and version',t=>{
+ const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+ for(const file of ['0001_memo.sql','0002_memo_tabs.sql'])db.exec(readFileSync(new URL('../worker/migrations/'+file,import.meta.url),'utf8'));
+ db.exec("UPDATE memo SET content='メモ本文' || id, version=id+10");
+ const before=db.prepare('SELECT * FROM memo ORDER BY id').all();
+ db.exec(readFileSync(new URL('../worker/migrations/0003_memo_titles.sql',import.meta.url),'utf8'));
+ const after=db.prepare('SELECT * FROM memo ORDER BY id').all();
+ assert.deepEqual(after.map(({title,...row})=>row),before.map(row=>({...row})));
+ assert.ok(after.every(row=>row.title===''));
+});
+
+test('memo names round-trip, reject stale renames, and survive old clients saving the body',async t=>{
+ const f=await fixture(t);
+ const renamed=await f.send('PUT',{content:'本文',title:'  仕事 🐶  ',version:0},{},'?id=2');
+ assert.equal(renamed.status,200);assert.equal((await renamed.json()).title,'仕事 🐶');
+ const stale=await f.send('PUT',{content:'本文',title:'古い画面の名前',version:0},{},'?id=2');
+ assert.equal(stale.status,409);assert.equal((await stale.json()).title,'仕事 🐶');
+ const oldClient=await f.send('PUT',{content:'旧画面から追記',version:1},{},'?id=2');
+ assert.equal(oldClient.status,200);assert.equal((await oldClient.json()).title,'仕事 🐶');
+ assert.equal((await (await f.send('GET',undefined,{},'?id=2')).json()).title,'仕事 🐶');
+ assert.equal((await (await f.send('GET')).json()).title,'');
+ const reset=await f.send('PUT',{content:'旧画面から追記',title:'',version:2},{},'?id=2');
+ assert.equal(reset.status,200);assert.equal((await reset.json()).title,'');
+});
+
+test('memo names validate type, length, and single-line text',async t=>{
+ const f=await fixture(t);
+ for(const title of [null,12,{},[],false,'あ'.repeat(61),'改行\n名前','改行\r名前','タブ\t名前']){
+  assert.equal((await f.send('PUT',{content:'',title,version:0})).status,400);
+ }
+ const title='あ'.repeat(60);
+ assert.equal((await f.send('PUT',{content:'',title,version:0})).status,200);
+ assert.equal((await (await f.send()).json()).title,title);
 });

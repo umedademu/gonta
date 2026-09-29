@@ -12,7 +12,9 @@
 .memo-open .memo-panel{visibility:visible;transition-delay:0s;border-left:1px solid var(--border)}
 .memo-sheet{height:100%;min-width:270px;padding:10px 26px 12px;display:flex;flex-direction:column;gap:10px}
 .memo-tabs{display:flex;gap:4px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:6px}
-.memo-tabs button{position:relative;flex:1;min-width:0;padding:10px 2px;font-size:12px;white-space:nowrap;color:var(--muted);border:1px solid transparent;border-radius:5px}
+.memo-tab{display:flex;flex:1;min-width:0}
+.memo-tabs button{position:relative;flex:1;min-width:0;padding:10px 2px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);border:1px solid transparent;border-radius:5px;touch-action:manipulation}
+.memo-name{width:100%;min-width:0;padding:10px 2px;border:1px solid var(--muted);border-radius:5px;background:#81986a22;color:inherit;font:inherit;font-size:12px;outline-offset:1px}
 .memo-tabs button:hover{color:inherit;border-color:var(--border)}
 .memo-tabs button[aria-selected=true]{color:inherit;background:#81986a22;border-color:var(--border);font-weight:600}
 .memo-tabs button:focus-visible{outline-offset:-2px}
@@ -25,6 +27,8 @@
 #memo-editor::placeholder{color:var(--muted);opacity:.8}
 #memo-editor:focus-visible{outline:1px solid var(--border);outline-offset:5px}
 .memo-foot{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:12px;font-size:10px;line-height:1.7;color:var(--muted);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom)}
+.memo-tools{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+#memo-rename{padding:0;text-decoration:underline;text-underline-offset:3px;font-size:10px;color:inherit}
 .memo-conflict{flex-shrink:0;border:1px solid var(--border);padding:10px;font-size:11px;line-height:1.7}
 .memo-conflict p{margin:0 0 8px}.memo-conflict summary{cursor:pointer}.memo-conflict pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;font:inherit}
 .memo-conflict-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.memo-conflict button{border:1px solid var(--border);padding:6px 8px;border-radius:4px}
@@ -43,5 +47,6 @@
  .memo-open .memo-toggle{right:0}
  .memo-sheet{min-width:0;padding:10px 40px 12px 22px}
  #memo-editor{font-size:16px}
+ .memo-name{font-size:16px;padding:7px 2px}
 }
 @media(prefers-reduced-motion:reduce){.workspace,.memo-panel,.memo-toggle{transition:none!important}}

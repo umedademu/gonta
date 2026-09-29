@@ -1,4 +1,4 @@
-import {MAX_MEMO_LENGTH, MAX_MEMOS, MemoState, memoToken} from './memo-state.js';
+import {MAX_MEMO_LENGTH, MAX_MEMOS, MAX_MEMO_TITLE_LENGTH, MemoState, memoToken} from './memo-state.js';
 
 export function createMemo() {
   const $ = id => document.getElementById(id);
@@ -10,6 +10,8 @@ export function createMemo() {
     selection:[0,0,'none'], scrollTop:0
   }));
   let notes = freshNotes(), active = 0, token = '', passcode = null, generation = 0;
+  let renaming = null;
+  const nameOf = note => note.state.title || `メモ${note.id}`;
   let opened = false;
   try {
     opened = localStorage.getItem('gonta.memo.open') === 'true';
@@ -29,13 +31,14 @@ export function createMemo() {
     if (focus && opened && !editor.disabled) editor.focus({preventScroll:true});
   }
   toggle.onclick = () => {
+    finishRename();
     opened = !opened;
     try { localStorage.setItem('gonta.memo.open', String(opened)); } catch {}
     layout(true);
     if (opened) syncPending();
   };
   panel.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !event.isComposing && !notes[active].composing) {
+    if (event.key === 'Escape' && !event.isComposing && !notes[active].composing && !renaming) {
       opened = false; layout(); toggle.focus();
       try { localStorage.setItem('gonta.memo.open', 'false'); } catch {}
     }
@@ -53,6 +56,7 @@ export function createMemo() {
     // Avoid resetting the caret, selection, undo stack, or an IME composition.
     if (!composing && editor.value !== state.content) editor.value = state.content;
     editor.disabled = !token || status === 'auth' || (!state.loaded && !cached && !state.dirty);
+    $('memo-rename').disabled = editor.disabled || composing;
     const labels = {
       locked:'接続設定のアクセスキーで利用できます', loading:'メモを読み込み中…',
       saving:'保存中…', saved:'保存済み', draft:'入力中…',
@@ -64,20 +68,49 @@ export function createMemo() {
     $('memo-status').dataset.state = state.conflict ? 'conflict' : status;
     $('memo-conflict').hidden = !state.conflict;
     $('memo-remote').textContent = state.conflict ? (state.conflict.content || '（空のメモ）') : '';
+    $('memo-remote-title').textContent = state.conflict ? `名前：${state.conflict.title || `メモ${active + 1}`}` : '';
     $('memo-count').textContent = `${state.content.length.toLocaleString('ja-JP')} 文字`;
     $('memo-page').setAttribute('aria-labelledby', `memo-tab-${active + 1}`);
-    $('memo-editor-label').textContent = `メモ${active + 1}の内容`;
+    $('memo-editor-label').textContent = `${nameOf(notes[active])}の内容`;
     notes.forEach((note, index) => {
-      const tab = $(`memo-tab-${note.id}`), selected = index === active;
+      const tab = $(`memo-tab-${note.id}`), selected = index === active, name = nameOf(note);
+      const nameEditor = $(`memo-name-${note.id}`), editing = renaming?.note === note;
+      if (tab.textContent !== name) tab.textContent = name;
+      tab.hidden = editing;
+      nameEditor.hidden = !editing;
+      if (!editing) nameEditor.value = '';
       tab.setAttribute('aria-selected', String(selected));
       tab.tabIndex = selected ? 0 : -1;
       tab.dataset.pending = String(note.state.dirty || !!note.state.conflict);
-      tab.title = `メモ${note.id}${note.state.conflict ? ' · 保存する内容を選んでください' : note.state.dirty ? ' · 未同期の変更あり' : ''}`;
+      tab.title = `${name} · ダブルクリックまたはF2で名前変更${note.state.conflict ? ' · 保存する内容を選んでください' : note.state.dirty ? ' · 未同期の変更あり' : ''}`;
     });
   }
+  function finishRename(commit = true, focus = false) {
+    if (!renaming) return;
+    const {note, initialValue} = renaming, nameEditor = $(`memo-name-${note.id}`);
+    const title = nameEditor.value.replace(/[\r\n\t]/g, ' ').trim().slice(0, MAX_MEMO_TITLE_LENGTH);
+    renaming = null;
+    if (commit && title !== initialValue && title !== note.state.title) {
+      note.state.title = title; persist(note); note.status = 'draft'; schedule(note);
+    }
+    render();
+    if (focus) $(`memo-tab-${note.id}`).focus();
+  }
+  function startRename(index = active) {
+    if (notes[active].composing) return;
+    if (renaming?.note === notes[index]) return;
+    finishRename(); selectNote(index);
+    if (editor.disabled) return;
+    const note = notes[active], nameEditor = $(`memo-name-${note.id}`);
+    renaming = {note, initialValue:nameOf(note), composing:false};
+    nameEditor.value = renaming.initialValue;
+    render(); nameEditor.focus({preventScroll:true}); nameEditor.select();
+  }
+  $('memo-rename').onclick = () => startRename();
   function selectNote(index) {
     const previous = notes[active];
     if (index === active || previous.composing) return;
+    finishRename();
     previous.selection = [editor.selectionStart, editor.selectionEnd, editor.selectionDirection];
     previous.scrollTop = editor.scrollTop;
     persist(previous);
@@ -92,12 +125,25 @@ export function createMemo() {
   for (let index = 0; index < MAX_MEMOS; index++) {
     const tab = $(`memo-tab-${index + 1}`);
     tab.onclick = () => selectNote(index);
+    tab.addEventListener('dblclick', () => startRename(index));
     tab.addEventListener('keydown', event => {
       if (event.isComposing || notes[active].composing) return;
+      if (event.key === 'F2') { event.preventDefault(); startRename(index); return; }
       const next = {ArrowRight:(index + 1) % MAX_MEMOS, ArrowLeft:(index + MAX_MEMOS - 1) % MAX_MEMOS, Home:0, End:MAX_MEMOS - 1}[event.key];
       if (next === undefined) return;
       event.preventDefault(); selectNote(next); $(`memo-tab-${next + 1}`).focus();
     });
+    const nameEditor = $(`memo-name-${index + 1}`);
+    nameEditor.maxLength = MAX_MEMO_TITLE_LENGTH;
+    nameEditor.addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229 || renaming?.composing) return;
+      if (event.key === 'Enter' || event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation(); finishRename(event.key === 'Enter', true);
+      }
+    });
+    nameEditor.addEventListener('compositionstart', () => { if (renaming) renaming.composing = true; });
+    nameEditor.addEventListener('compositionend', () => { if (renaming) renaming.composing = false; });
+    nameEditor.addEventListener('blur', () => finishRename());
   }
   function schedule(note, delay = 750) {
     clearTimeout(note.timer); note.timer = setTimeout(() => void sync(note), delay);
@@ -111,7 +157,7 @@ export function createMemo() {
     if (!response.ok && response.status !== 409) throw new Error('Memo unavailable');
     const data = await response.json();
     // An old proxy/Worker may drop the id; never treat another tab as this memo.
-    if (!data || data.id !== id || typeof data.content !== 'string' || !Number.isSafeInteger(data.version)) throw new Error('Invalid memo');
+    if (!data || data.id !== id || typeof data.content !== 'string' || typeof data.title !== 'string' || !Number.isSafeInteger(data.version)) throw new Error('Invalid memo');
     return {conflict:response.status === 409, data};
   }
   async function sync(note) {
@@ -129,12 +175,12 @@ export function createMemo() {
         state.accept(result.data); persist(note); render();
       }
       if (state.dirty && !state.conflict && !note.composing) {
-        const sent = state.content;
+        const sent = {content:state.content, title:state.title};
         note.status = 'saving'; render();
-        const result = await request(note.id, 'PUT', {content:sent, version:state.version}, auth);
+        const result = await request(note.id, 'PUT', {...sent, version:state.version}, auth);
         if (current !== generation) return;
         if (result.conflict) state.accept(result.data);
-        else state.acknowledge(result.data, sent);
+        else state.acknowledge(result.data, sent.content, sent.title);
         persist(note);
       }
       note.status = state.dirty ? 'draft' : 'saved';
@@ -176,6 +222,7 @@ export function createMemo() {
     notes.forEach((note, index) => { if (note.state.dirty || (index === active && opened && !document.hidden)) void sync(note); });
   });
   window.addEventListener('beforeunload', event => {
+    finishRename();
     if (notes.some(note => note.state.dirty && !note.localOK)) { event.preventDefault(); event.returnValue = ''; }
   });
   setInterval(() => { if (opened && !document.hidden) syncPending(); }, 30000);
@@ -183,6 +230,7 @@ export function createMemo() {
 
   return {async setCredential(key) {
     if ((key || null) === passcode) return;
+    finishRename();
     notes.forEach(note => { persist(note); clearTimeout(note.timer); });
     const current = ++generation;
     passcode = key || null; token = '';

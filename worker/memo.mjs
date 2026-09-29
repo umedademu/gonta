@@ -1,4 +1,5 @@
 const MAX_LENGTH = 100000;
+const MAX_TITLE_LENGTH = 60;
 const MAX_BYTES = 650000;
 const encoder = new TextEncoder();
 export async function tokenHash(value) {
@@ -43,16 +44,18 @@ export default {async fetch(request, env) {
   if (ids.length > 1 || !/^[1-5]$/.test(ids[0] ?? '1')) return reply({error:'Invalid memo id'},400);
   const id = Number(ids[0] ?? '1');
   try {
-    if (request.method === 'GET') return reply(await env.DB.prepare('SELECT id, content, version, updated_at AS updatedAt FROM memo WHERE id = ?').bind(id).first());
+    if (request.method === 'GET') return reply(await env.DB.prepare('SELECT id, title, content, version, updated_at AS updatedAt FROM memo WHERE id = ?').bind(id).first());
     if (request.method !== 'PUT') return reply({error:'Method not allowed'},405);
     if (!request.headers.get('Content-Type')?.startsWith('application/json')) return reply({error:'Expected JSON'},415);
     const body = await readBody(request);
     if (!body || typeof body.content !== 'string' || body.content.length > MAX_LENGTH || !Number.isSafeInteger(body.version) || body.version < 0) return reply({error:'Invalid memo'},400);
+    if (body.title !== undefined && (typeof body.title !== 'string' || body.title.length > MAX_TITLE_LENGTH || /[\r\n\t]/.test(body.title))) return reply({error:'Invalid memo title'},400);
     const updatedAt = new Date().toISOString();
     // Compare-and-swap is one atomic SQL statement, including simultaneous tabs.
-    const result = await env.DB.prepare('UPDATE memo SET content = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ? RETURNING id, content, version, updated_at AS updatedAt').bind(body.content,updatedAt,id,body.version).first();
+    // Older clients omit title; their body saves must preserve the current name.
+    const result = await env.DB.prepare('UPDATE memo SET content = ?, title = COALESCE(?, title), version = version + 1, updated_at = ? WHERE id = ? AND version = ? RETURNING id, title, content, version, updated_at AS updatedAt').bind(body.content,body.title === undefined ? null : body.title.trim(),updatedAt,id,body.version).first();
     if (result) return reply(result);
-    return reply(await env.DB.prepare('SELECT id, content, version, updated_at AS updatedAt FROM memo WHERE id = ?').bind(id).first(),409);
+    return reply(await env.DB.prepare('SELECT id, title, content, version, updated_at AS updatedAt FROM memo WHERE id = ?').bind(id).first(),409);
   } catch (error) {
     if (error instanceof RangeError) return reply({error:'Too large'},413);
     if (error instanceof SyntaxError) return reply({error:'Invalid JSON'},400);
