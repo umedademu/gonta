@@ -15,4 +15,6 @@ export function diaryInstruction(date,now=new Date()){
  const stamp=jstParts(now);
  return `[日記の定時実行 ${stamp.date} ${stamp.time}]\n対象日: ${date}\nDIARY_TASK.md を読み、その手順どおりに対象日の日記を更新してください。これは梅田さんからの発言ではなく定時の作業指示です。終わったら、書き込んだファイル名と追加した出来事の数、またはスキップ理由を1〜3行で報告してください。`;
 }
-export function messageLabel(source,now=new Date()){const s=jstParts(now);return `[${source==='line'?'LINE':source==='local'?'PC':'Web'} ${s.date} ${s.time}]`;}
+const SOURCE_NAMES={line:'LINE',local:'PC',discord:'Discord',web:'Web'};
+// e.g. "[Web 2026-10-20 21:30]" or "[Discord #何でも 梅田 2026-10-20 21:30]"
+export function messageLabel(source,now=new Date(),detail=''){const s=jstParts(now);const extra=String(detail||'').replace(/[\[\]\n]/g,' ').trim();return `[${SOURCE_NAMES[source]||'Web'}${extra?' '+extra:''} ${s.date} ${s.time}]`;}

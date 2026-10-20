@@ -7,13 +7,14 @@
 - `public/` — Vercelで配信する静的Web画面。スマートフォン対応。
 - `relay/` — PC（Windows）で稼働する認証付き中継役。
   - `relay/brain.mjs` — `claude`を1本だけ常駐させ、発言を1ターンずつ流し込む。会話IDを保存し、落ちても同じ会話を復帰する。
-  - `relay/server.mjs` — WebSocket API、LINE Webhook、メモ帳APIの転送、ローカル専用入口。
+  - `relay/server.mjs` — WebSocket API、LINE Webhook、Discord受け口、メモ帳APIの転送、ローカル専用入口。
+  - `relay/discord.mjs` — Discordのボット接続（受信はGateway、返信はREST）。
 - `scripts/tunnel.mjs` — Cloudflare Quick Tunnelの接続先管理。LINE WebhookのURLを追従させます。
 - `scripts/local.mjs` — PC内からの操作（状態確認・日記の実行・テスト送信）。
 - `scripts/start-gonta.ps1` / `scripts/install-windows-startup.ps1` — Windowsログイン時の自動起動。
 - `scripts/retire-openclaw.ps1` — 旧構成（WSLのOpenClaw）の停止。
 - `scripts/legacy/` — 旧構成の起動スクリプト（参考・復旧用）。
-- `test/` — 頭脳の入出力、作業表示、日記の日付、Webhook署名、連携コード、重複排除の検証。
+- `test/` — 頭脳の入出力、作業表示、日記の日付、Discordの受け口、Webhook署名、連携コード、重複排除の検証。
 - `worker/` — メモ帳用Cloudflare Worker。今回の移行では変更していません。
 
 人格と記憶はリポジトリの外、`C:\Users\USER\gonta-brain` にあります（後述）。
@@ -23,12 +24,12 @@
 中継役は起動時に`claude`を子プロセスとして1本起動し、作業ディレクトリを人格フォルダにして常駐させます。
 
 - 入出力は `--input-format stream-json --output-format stream-json --include-partial-messages`。返答はWebへ逐次表示し、LINEへは完成後に送ります。
-- WebとLINEの発言は同じ会話に順番に流します。同時実行はせず、待ち行列で1ターンずつ処理します。
+- Web・LINE・Discordの発言は同じ1つの会話に順番に流します。同時実行はせず、待ち行列で1ターンずつ処理します。
 - 権限は `--permission-mode acceptEdits`、許可ツールはPowerShell・Bash・ファイルの読み書き検索・Web取得・スキル。`--permission-prompts none` なので、許可外の操作は確認を待たずに拒否されます。サブエージェント（Agent）は使いません。
 - 会話IDは `C:\Users\USER\.gonta\claude-session.json` に保存し、プロセスが落ちたときや中継役の再起動時は `--resume` で同じ会話を復帰します。復帰できない場合だけ新しい会話を始めます。
 - `--bare` は付けません（サブスクのログインを使うため）。`ANTHROPIC_API_KEY` は設定せず、親プロセスから引き継いだClaude関連の環境変数も渡しません。
 - モデルは `config.json` の `claude.model`（既定 `sonnet`）。利用枠はコーディング作業と共有なので、モデルを呼ぶのは人の発言と1日1回の日記だけです。定期的な見回りや通知はしません。
-- 各発言には `[Web 2026-10-20 21:30]` のような送信元と日本時間の前置きを付けて渡します。ゴンタはこれで現在時刻を知ります。
+- 各発言には `[Web 2026-10-20 21:30]` や `[Discord #何でも 梅田 2026-10-20 21:30]` のような送信元と日本時間の前置きを付けて渡します。ゴンタはこれで現在時刻を知ります。
 
 ## 人格フォルダ（`C:\Users\USER\gonta-brain`）
 
@@ -49,11 +50,20 @@ Desktop直下に置かないのは、`C:\Users\USER\Desktop\CLAUDE.md`（開発�
   "allowedOrigins": ["http://127.0.0.1:18890", "https://your-app.vercel.app"],
   "siteUrl": "https://your-app.vercel.app",
   "line": {"secret": "チャネルシークレット", "token": "チャネルアクセストークン", "botId": "@bot-id"},
+  "discord": {
+    "token": "Botトークン",
+    "guilds": {"サーバーID": {"deny": ["返答しないチャンネルID"]}},
+    "dm": true,
+    "requireMention": true,
+    "announce": {"diary": "日記の結果を投稿するチャンネルID"},
+    "diaryChannels": ["日記の材料にするチャンネルID"],
+    "diaryAuthor": "梅田さんのユーザーID"
+  },
   "claude": {"model": "sonnet", "workspace": "C:\\Users\\USER\\gonta-brain"}
 }
 ```
 
-`claude.model` は `sonnet` / `opus` / `fable` などの別名か正式名。`claude.effort` で思考の深さ、`claude.workspace` で人格フォルダの場所を変えられます。`line` を使わない場合は空のオブジェクトにします。`allowedOrigins` は接続のたびに読み直すので、トンネルのURLが変わっても中継役の再起動は不要です。その他の変更後は中継役を再起動します。
+`discord` を省くとDiscordの受け口は起動しません。`claude.model` は `sonnet` / `opus` / `fable` などの別名か正式名。`claude.effort` で思考の深さ、`claude.workspace` で人格フォルダの場所を変えられます。`line` を使わない場合は空のオブジェクトにします。`allowedOrigins` は接続のたびに読み直すので、トンネルのURLが変わっても中継役の再起動は不要です。その他の変更後は中継役を再起動します。
 
 同じフォルダの `gonta.sqlite` に会話ログ（Web履歴用・日記の材料）、LINE連携、Webhook受信状態を保存します。`local-token` はローカル専用入口の合言葉、`discovery-private.pem` は接続先案内の署名鍵です。これらは共有・コミットしないでください。
 
@@ -130,6 +140,12 @@ secretのJSONは `{"MEMO_TOKEN_HASH":"SHA256(SHA256('gonta.memo.v1:' + 接続キ
 
 連携後はそのまま送ると、Webと同じ1つの会話の続きになります。個人トークのテキストのみ対応します。Webhookは署名を検証し、イベントIDをSQLiteに保存して再送を重複排除します。処理を始めたイベントはクラッシュ後に自動実行しません。45秒以内に返答が完成しないときは「考え中」と返し、完成後にプッシュメッセージで送ります。
 
+## Discord
+
+旧構成のBotトークンをそのまま `discord.token` に設定すると、中継役がDiscordに接続します。`guilds` に書いたサーバーのチャンネル（`deny` 以外）とDMを受け付け、サーバー内ではゴンタへのメンションか、ゴンタの発言への返信だけに応答します（`requireMention: false` で全発言に応答）。返信は元のメッセージへの返信として投稿し、2000文字ごとに分割します。他のボットの発言には応答しません。
+
+Discordの発言もWeb・LINEと同じ1つの会話に入り、Web画面の履歴にも表示されます。毎晩の日記の結果は `announce.diary` のチャンネルに投稿します。日記の材料集めは `diaryChannels` の各チャンネルを読み、`diaryAuthor` の投稿だけを使います。Developer PortalでMESSAGE CONTENTインテントを有効にしておく必要があります（旧構成で有効化済み）。
+
 ## 旧構成（OpenClaw）からの切り替え
 
 新構成の動作確認後に、旧構成の自動起動とWSL内のサービスを止めます。アンインストールやデータ削除はしません。
@@ -147,7 +163,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-window
 
 **認証済みユーザーの発言は、常駐するClaude Codeの権限（PowerShell実行・ファイル操作）で実行されます。** アクセスキーと自動接続リンクを他人に渡さないでください。TLSはCloudflareで終端します。LINE利用時はLINEにも送受信内容が渡ります。VercelとGitHubにはアプリのソースコードだけを置き、トークン・会話履歴・人格フォルダを置きません。
 
-Discordの受け口は旧構成とともに停止しています。添付ファイル、画像表示、Claude Codeの確認ダイアログは未対応です。
+Discordの添付ファイル・リアクション、画像表示、Claude Codeの確認ダイアログは未対応です。
 
 ## 検証・デプロイ
 

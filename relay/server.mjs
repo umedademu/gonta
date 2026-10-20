@@ -6,6 +6,7 @@ import {mkdirSync,readFileSync,existsSync,writeFileSync,chmodSync} from 'node:fs
 import {createHmac,randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
 import {Brain} from './brain.mjs';
+import {Discord,addressed,allowedChannel,cleanContent} from './discord.mjs';
 import {ActivityTracker} from './activity.mjs';
 import {Store} from './store.mjs';
 import {diaryDate,diaryInstruction,messageLabel} from './diary.mjs';
@@ -42,7 +43,7 @@ const broadcastConversation=obj=>{for(const ws of peers)if(ws.session===conversa
 const visibleRun=()=>{const b=brain.busy;return b&&!b.hidden?{runId:b.runId,text:b.text}:null;};
 function info(){
  const b=brain.busy;
- return{gateway:brain.ready,backgroundActivity:b?.hidden?{kind:'diary'}:null,version:brain.version?`Claude Code ${brain.version}`:'Claude Code',model:brain.modelName||brain.model,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts()};
+ return{gateway:brain.ready,backgroundActivity:b?.hidden?{kind:'diary'}:null,version:brain.version?`Claude Code ${brain.version}`:'Claude Code',model:brain.modelName||brain.model,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts(),discord:discord?(discord.ready?'connected':'offline'):'disabled'};
 }
 function sessions(){return[{key:conversation,name:'#何でも',channel:'web',updatedAt:store.lastMessageAt(),hasActiveRun:!!visibleRun()}];}
 function history(key){
@@ -51,9 +52,9 @@ function history(key){
  return{activity:activities.get(),messages:store.history(100).map(m=>({id:m.id,role:m.role,text:m.text,timestamp:m.timestamp})),sessionInfo:{hasActiveRun:!!run},inFlightRun:run};
 }
 // A turn is one message to the resident brain. Web and LINE share the queue.
-function submit({text,source,runId,hidden=false}){
+function submit({text,source,runId,hidden=false,detail=''}){
  if(!hidden)store.addMessage({id:runId,role:'user',source,text});
- return brain.send({text:hidden?text:messageLabel(source)+'\n'+text,source,runId,hidden});
+ return brain.send({text:hidden?text:messageLabel(source,new Date(),detail)+'\n'+text,source,runId,hidden});
 }
 async function rpc(ws,method,p){
  switch(method){
@@ -140,7 +141,15 @@ wss.on('connection',(ws,req)=>{
  ws.on('close',()=>{clearTimeout(timeout);peers.delete(ws);});ws.on('error',()=>{});
 });
 brain.on('turn',t=>{
- if(t.hidden){if(t.state!=='delta')broadcast({type:'status',status:info()});if(t.state!=='start'&&t.state!=='delta')console.log(`Diary turn ${t.state}:`,(t.error||t.text||'').slice(0,300).replace(/\s+/g,' '));return;}
+ if(t.hidden){
+  if(t.state!=='delta')broadcast({type:'status',status:info()});
+  if(t.state!=='start'&&t.state!=='delta'){
+   console.log(`Diary turn ${t.state}:`,(t.error||t.text||'').slice(0,300).replace(/\s+/g,' '));
+   const channel=config.discord?.announce?.diary;
+   if(discord?.ready&&channel&&t.source==='diary')discord.reply(channel,t.state==='final'?t.text:`日記の定時実行が失敗しました: ${t.error||''}`).catch(e=>console.error('Diary announce:',e.message));
+  }
+  return;
+ }
  if(t.state==='start')return;
  if(['final','error','aborted'].includes(t.state)){
   if(t.text)store.addMessage({id:'reply:'+t.runId,role:'assistant',source:t.source,text:t.text});
@@ -152,6 +161,28 @@ brain.on('tool',e=>{if(e.hidden)return;const activity=activities.event(e);if(act
 brain.on('ready',()=>{console.log('Claude brain ready');broadcast({type:'status',status:info()});void drain();});
 brain.on('offline',()=>{const change=activities.clear();if(change!==undefined)broadcastConversation({type:'activity',sessionKey:conversation,activity:null});broadcast({type:'status',status:info()});});
 
+// Discord: one bot connection; replies go to the channel the message came from.
+let discord=null;
+if(config.discord?.token){
+ discord=new Discord({token:config.discord.token});
+ discord.on('ready',()=>broadcast({type:'status',status:info()}));
+ discord.on('offline',()=>broadcast({type:'status',status:info()}));
+ discord.on('message',m=>{discordMessage(m).catch(e=>console.error('Discord message failed:',e.message));});
+ discord.connect();
+}
+async function discordMessage(m){
+ if(!m?.author||m.author.bot||typeof m.content!=='string'||!discord.user)return;
+ if(!allowedChannel(m,config.discord)||!addressed(m,discord.user.id,config.discord))return;
+ const text=cleanContent(m.content,discord.user.id);if(!text)return;
+ const runId='discord:'+m.id;
+ if(store.hasMessage(runId))return;
+ if(!limit('discord',30))return;
+ const name=await discord.channelName(m.channel_id);
+ const author=m.member?.nick||m.author.global_name||m.author.username||'';
+ if(!brain.ready){await discord.reply(m.channel_id,'PCのゴンタが起動していません。少し待ってから送ってください。',m.id);return;}
+ try{const r=await submit({text,source:'discord',runId,detail:`${name} ${author}`.trim()});await discord.reply(m.channel_id,r.text,m.id);}
+ catch(e){await discord.reply(m.channel_id,(e.text?e.text+'\n\n':'')+e.message,m.id);}
+}
 async function lineSend(endpoint,payload){
  const r=await fetch('https://api.line.me/v2/bot/message/'+endpoint,{method:'POST',headers:{Authorization:`Bearer ${config.line.token}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw Error(`LINE ${endpoint} HTTP ${r.status}`);
@@ -223,5 +254,5 @@ local.requestTimeout=0;local.headersTimeout=60000;
 server.listen(port,'127.0.0.1',()=>console.log(`Gonta listening on http://127.0.0.1:${port}`));
 local.listen(localPort,'127.0.0.1',()=>console.log(`Local trigger on http://127.0.0.1:${localPort}`));
 brain.start();
-process.on('SIGTERM',()=>{brain.stop();for(const ws of wss.clients)ws.close();local.close();server.close(()=>{store.close();process.exit(0);});});
+process.on('SIGTERM',()=>{brain.stop();discord?.stop();for(const ws of wss.clients)ws.close();local.close();server.close(()=>{store.close();process.exit(0);});});
 process.on('SIGINT',()=>process.emit('SIGTERM'));
