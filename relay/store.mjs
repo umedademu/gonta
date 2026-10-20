@@ -5,6 +5,8 @@ export class Store {
  CREATE TABLE IF NOT EXISTS line_users(id TEXT PRIMARY KEY,session_key TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS line_events(id TEXT PRIMARY KEY,body TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created INTEGER NOT NULL,error TEXT);
  CREATE TABLE IF NOT EXISTS pairing(code TEXT PRIMARY KEY,session_key TEXT NOT NULL,expires INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,role TEXT NOT NULL,source TEXT NOT NULL,text TEXT NOT NULL,hidden INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS messages_created ON messages(created);
  `);}
  get(k){const r=this.db.prepare('SELECT value FROM settings WHERE key=?').get(k);return r?JSON.parse(r.value):undefined;}
  set(k,v){this.db.prepare('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k,JSON.stringify(v));}
@@ -16,5 +18,10 @@ export class Store {
  next(){return this.db.prepare("SELECT * FROM line_events WHERE status='pending' ORDER BY created LIMIT 1").get();}
  status(id,status,error=null){this.db.prepare('UPDATE line_events SET status=?,error=? WHERE id=?').run(status,error,id);}
  counts(){return this.db.prepare('SELECT status,count(*) AS count FROM line_events GROUP BY status').all();}
+ // Conversation log shown in the Web history and read by the diary collector.
+ addMessage({id,role,source,text,hidden=false,created=Date.now()}){return this.db.prepare('INSERT OR IGNORE INTO messages(id,role,source,text,hidden,created) VALUES(?,?,?,?,?,?)').run(id,role,source,text,hidden?1:0,created).changes>0;}
+ hasMessage(id){return !!this.db.prepare('SELECT 1 FROM messages WHERE id=?').get(id);}
+ history(limit=100){return this.db.prepare('SELECT id,role,text,source,created AS timestamp FROM (SELECT * FROM messages WHERE hidden=0 ORDER BY created DESC LIMIT ?) ORDER BY created ASC').all(limit);}
+ lastMessageAt(){return this.db.prepare('SELECT max(created) AS at FROM messages WHERE hidden=0').get()?.at||null;}
  close(){this.db.close();}
 }

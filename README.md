@@ -1,25 +1,116 @@
 # Gonta
 
-OpenClawのDiscord会話を、WebとLINEから続ける個人用チャットアプリです。
+個人アシスタント「ゴンタ」に、WebとLINEから話しかけるための個人用チャットアプリです。ゴンタの頭脳は、このPC（Windows）で常駐する改変なしのClaude Code（`claude`コマンド）です。課金はPCにログイン済みのClaudeサブスクリプションだけで、APIキーは使いません。
 
 ## 構成
 
 - `public/` — Vercelで配信する静的Web画面。スマートフォン対応。
-- `relay/` — PCのWSLで稼働する認証付きブリッジ。OpenClaw Gatewayはlocalhostのまま。
+- `relay/` — PC（Windows）で稼働する認証付き中継役。
+  - `relay/brain.mjs` — `claude`を1本だけ常駐させ、発言を1ターンずつ流し込む。会話IDを保存し、落ちても同じ会話を復帰する。
+  - `relay/server.mjs` — WebSocket API、LINE Webhook、メモ帳APIの転送、ローカル専用入口。
 - `scripts/tunnel.mjs` — Cloudflare Quick Tunnelの接続先管理。LINE WebhookのURLを追従させます。
-- `test/` — Webhook署名、許可する会話、連携コード、重複排除の検証。
+- `scripts/local.mjs` — PC内からの操作（状態確認・日記の実行・テスト送信）。
+- `scripts/start-gonta.ps1` / `scripts/install-windows-startup.ps1` — Windowsログイン時の自動起動。
+- `scripts/retire-openclaw.ps1` — 旧構成（WSLのOpenClaw）の停止。
+- `scripts/legacy/` — 旧構成の起動スクリプト（参考・復旧用）。
+- `test/` — 頭脳の入出力、作業表示、日記の日付、Webhook署名、連携コード、重複排除の検証。
+- `worker/` — メモ帳用Cloudflare Worker。今回の移行では変更していません。
 
-WebとLINEはOpenClawの同じ`sessionKey`を使います。Discordの既存履歴を移行・統合する必要はありません。Webで送った内容はOpenClawの会話履歴に保存されますが、Discord画面へのメッセージの転載はしません。元のDiscordから続けると同じ文脈を利用します。
+人格と記憶はリポジトリの外、`C:\Users\USER\gonta-brain` にあります（後述）。
+
+## 頭脳（常駐するClaude Code）
+
+中継役は起動時に`claude`を子プロセスとして1本起動し、作業ディレクトリを人格フォルダにして常駐させます。
+
+- 入出力は `--input-format stream-json --output-format stream-json --include-partial-messages`。返答はWebへ逐次表示し、LINEへは完成後に送ります。
+- WebとLINEの発言は同じ会話に順番に流します。同時実行はせず、待ち行列で1ターンずつ処理します。
+- 権限は `--permission-mode acceptEdits`、許可ツールはPowerShell・Bash・ファイルの読み書き検索・Web取得・スキル。`--permission-prompts none` なので、許可外の操作は確認を待たずに拒否されます。サブエージェント（Agent）は使いません。
+- 会話IDは `C:\Users\USER\.gonta\claude-session.json` に保存し、プロセスが落ちたときや中継役の再起動時は `--resume` で同じ会話を復帰します。復帰できない場合だけ新しい会話を始めます。
+- `--bare` は付けません（サブスクのログインを使うため）。`ANTHROPIC_API_KEY` は設定せず、親プロセスから引き継いだClaude関連の環境変数も渡しません。
+- モデルは `config.json` の `claude.model`（既定 `sonnet`）。利用枠はコーディング作業と共有なので、モデルを呼ぶのは人の発言と1日1回の日記だけです。定期的な見回りや通知はしません。
+- 各発言には `[Web 2026-10-20 21:30]` のような送信元と日本時間の前置きを付けて渡します。ゴンタはこれで現在時刻を知ります。
+
+## 人格フォルダ（`C:\Users\USER\gonta-brain`）
+
+- `CLAUDE.md` — 人格（旧 SOUL / IDENTITY / USER / AGENTS を統合）。末尾で `MEMORY.md` を読み込みます。
+- `MEMORY.md` — 長期記憶。`memory/` — 日々のメモと進捗ファイル。ゴンタ自身が会話の中で書き足します。
+- `DIARY_TASK.md` — 毎晩の日記作成の手順。`.claude/skills/diary-writer/` — 日記の書式と決まり。
+- `scripts/collect_diary_context.py` — 日記の材料集め（Web・LINEの会話、Codex Desktop、Claude Desktopの作業履歴）。
+- `tasks/habits.md` — 習慣表（参照のみ）。`archive/openclaw/` — 移行前の元ファイルの写し。
+- `.claude/settings.json` — 許可ツールの設定。
+
+Desktop直下に置かないのは、`C:\Users\USER\Desktop\CLAUDE.md`（開発用の指示）を自動で継承してしまうためです。元のOpenClaw側のファイル（WSLの `~/.openclaw/workspace`）は消していません。
+
+## 設定（`C:\Users\USER\.gonta\config.json`）
+
+```json
+{
+  "passcode": "24文字以上のアクセスキー",
+  "allowedOrigins": ["http://127.0.0.1:18890", "https://your-app.vercel.app"],
+  "siteUrl": "https://your-app.vercel.app",
+  "line": {"secret": "チャネルシークレット", "token": "チャネルアクセストークン", "botId": "@bot-id"},
+  "claude": {"model": "sonnet", "workspace": "C:\\Users\\USER\\gonta-brain"}
+}
+```
+
+`claude.model` は `sonnet` / `opus` / `fable` などの別名か正式名。`claude.effort` で思考の深さ、`claude.workspace` で人格フォルダの場所を変えられます。`line` を使わない場合は空のオブジェクトにします。`allowedOrigins` は接続のたびに読み直すので、トンネルのURLが変わっても中継役の再起動は不要です。その他の変更後は中継役を再起動します。
+
+同じフォルダの `gonta.sqlite` に会話ログ（Web履歴用・日記の材料）、LINE連携、Webhook受信状態を保存します。`local-token` はローカル専用入口の合言葉、`discovery-private.pem` は接続先案内の署名鍵です。これらは共有・コミットしないでください。
+
+## ローカル起動手順
+
+Node.js 22.16以上、Windowsにインストールされログイン済みのClaude Code（`claude auth status` で確認）、Python 3（日記の材料集め）が必要です。
+
+```sh
+npm ci
+npm start
+```
+
+初回に `~/.gonta/config.json` を作成します。`http://127.0.0.1:18890` を開き、アクセスキーを入力します。PC内からの確認は次のとおりです。
+
+```powershell
+node scripts\local.mjs status
+node scripts\local.mjs say "こんにちは"
+```
+
+## Windowsログイン時の自動起動
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-windows-startup.ps1
+```
+
+ユーザーのログイン時にタスク `Gonta-Autostart` が端末画面を開かずに起動スクリプト `%LOCALAPPDATA%\Gonta\Start-Gonta.ps1` を実行し、中継役（常駐 `claude` を含む）と外部接続トンネルを起動して監視します。落ちた場合は10秒後に再起動します。ログは `%LOCALAPPDATA%\Gonta\` の `startup.log`・`relay.log`・`tunnel.log`。同時に日記用のタスク `Gonta-Diary`（毎日03:00）も登録します。パスワードの登録は不要です。Windowsへログインする前の起動と、スリープ中・電源オフ中の利用はできません。
+
+解除する場合:
+
+```powershell
+Unregister-ScheduledTask -TaskName Gonta-Autostart -Confirm:$false
+Unregister-ScheduledTask -TaskName Gonta-Diary -Confirm:$false
+```
+
+## 日記
+
+毎日03:00にタスク `Gonta-Diary` が `node scripts\local.mjs diary` を実行します。中継役のローカル専用入口（`127.0.0.1:18891`、トンネルは通さない、`local-token` が必要）へ指示が届き、常駐するゴンタが `DIARY_TASK.md` の手順で前日分（午前4時区切り）の日記を `C:\Users\USER\repo\my-vault\日記\YYYY\MM\YYYY年MM月DD日.md` に書きます。材料はその日のWeb・LINEの会話に加え、`collect_diary_context.py` が集めるCodex DesktopとClaude Desktopの作業履歴です。結果は `%LOCALAPPDATA%\Gonta\diary.log` に残ります。
+
+手動で特定の日を書く場合:
+
+```powershell
+node scripts\local.mjs diary 2026-10-20
+```
+
+日記の実行中、Web画面では日記を書く姿が表示されます。旧構成の4時間おきの更新とDiscord投稿は廃止しました。
+
+## 接続
+
+`http://127.0.0.1:18890` またはVercelのWeb画面を開き、PC側の接続先URLとアクセスキーを入力します。通常はアクセスキーをブラウザのsessionStorageに保持します。「この端末で接続情報を覚える」を選ぶとlocalStorageに保存して次回も自動接続します。Web版の接続先URLは自動取得します。詳しくは[接続ガイド](CONNECTION.md)を参照してください。送信結果が不明なメッセージは自動再送しません。
+
+Cloudflare Quick Tunnelは `scripts/tunnel.mjs` が起動します。`cloudflared` はWindowsなら `winget install Cloudflare.cloudflared` で導入でき、PATH上か `%LOCALAPPDATA%\Microsoft\WinGet\Links` から探します（`GONTA_CLOUDFLARED` で場所を指定可能）。`.local/接続情報.txt` と `.local/Gontaを開く.url` に最新情報が出力されます。これらは秘密情報を含むため共有・コミットしないでください。
+
+**Quick Tunnelは試用向けで、再起動時にURLが変わり、可用性の保証もありません。** LINEのWebhook URLは自動更新され、Webは接続先を自動取得します。恒久運用では独自ドメインを使った名前付きTunnelに切り替えてください。
 
 ## メモ帳
 
-画面右端の「« メモ」でメモ帳を開き、「メモ1〜5」のタブで最大5つのメモを切り替えます。既存のメモと端末の下書きはメモ1に引き継ぎます。タブは左右矢印・Home・Endキーでも切り替えられます。PCではゴンタ・発言枠・入力欄が一緒に左へ寄り、閉じると元の配置に戻ります。幅900px以下では会話とメモを切り替えます。会話を切り替えてもメモは共通です。
-
-タブ名をダブルクリック、タブにフォーカスしてF2、または下部の「名前変更」で名前を編集できます。Enterまたは入力欄から離れると確定し、Escで取り消します。名前は60文字までで、空欄にすると「メモ1〜5」に戻ります。長い名前はタブ内で省略表示します。
-
-入力を止めて約0.75秒後にCloudflare D1へ自動保存します。名前も本文と一緒に保存・同期します。保存や下書き、競合の管理はメモごとに独立し、切り替え前のメモも保存を続けます。通信中断時の下書きは端末に残し、再接続時に同期します。同じメモを複数画面で編集して衝突した場合は下書きを残し、どちらを保存するか表示します。未同期の変更があるタブには点を表示します。上限は各メモ10万文字です。開閉状態と選択中のタブも端末に記憶します。
-
-保存APIは専用Worker `gonta-memo`、保存先はD1 `gonta-memo` の5行です。Vercelの `/api/memo?id=1`〜`5` から転送し、ID省略時は従来どおりメモ1を扱います。通常の接続キーから用途を分けて導出したトークンで認証します。WorkerにはそのSHA-256ハッシュをsecret `MEMO_TOKEN_HASH` として登録し、元の接続キーは送りません。PCが停止中でも、接続キーを保持した端末ならメモは利用できます。キーを変更した場合はWorkerのsecretも更新してください。
+画面右端の「« メモ」でメモ帳を開き、「メモ1〜5」のタブで最大5つのメモを切り替えます。タブ名の変更、自動保存、競合時の下書き保持など、動作は従来どおりです。保存APIは専用Worker `gonta-memo`、保存先はD1 `gonta-memo` の5行で、Vercelの `/api/memo?id=1`〜`5` から転送します。通常の接続キーから用途を分けて導出したトークンで認証し、WorkerにはそのSHA-256ハッシュを secret `MEMO_TOKEN_HASH` として登録します。PCが停止中でも、接続キーを保持した端末ならメモは利用できます。
 
 ```sh
 npx wrangler d1 execute gonta-memo --remote --config worker/wrangler.jsonc --file worker/migrations/0001_memo.sql
@@ -28,61 +119,35 @@ npx wrangler d1 execute gonta-memo --remote --config worker/wrangler.jsonc --fil
 npx wrangler deploy --config worker/wrangler.jsonc --secrets-file /secure/path/memo-secrets.json
 ```
 
-secretのJSONは `{"MEMO_TOKEN_HASH":"SHA256(SHA256('gonta.memo.v1:' + 接続キー)の小文字hex文字列)の小文字hex文字列"}`。実際の値や接続キーはコミットしないでください。認証なしの読み書きは禁止しています。
-
-既存環境では `0002_memo_tabs.sql` を一度だけ適用し、Worker、Web画面の順に更新します。PCのローカル画面を使う場合は、クエリパラメータの転送に対応したブリッジも再起動してください。
-
-5タブ対応済みの環境に名前変更を追加する場合は `0003_memo_titles.sql` だけを一度適用し、Worker、Web画面の順に更新します。本文とバージョンは保持され、名前を送信しない旧画面からの保存でも名前は消えません。
-
-## ローカル起動手順
-
-Node.js 22.16以上と、稼働中のOpenClaw 2026.8.2（wire protocol 4）が必要です。
-
-```sh
-npm ci
-npm start
-```
-
-初回に`~/.gonta/config.json`と独立した接続用デバイスを作成します。設定・鍵・LINE連携・Webhook受信状態は`~/.gonta`に保存します。OpenClaw設定は`~/.openclaw/openclaw.json`から読み取り、書き換えません。
-
-```json
-{
-  "passcode": "生成された24文字以上のアクセスキー",
-  "allowedOrigins": ["http://127.0.0.1:18890", "https://your-app.vercel.app"],
-  "siteUrl": "https://your-app.vercel.app",
-  "line": {"secret": "チャネルシークレット", "token": "チャネルアクセストークン", "botId": "@bot-id"}
-}
-```
-
-LINEを使わない場合は`line`を空のオブジェクトにします。設定変更後はブリッジを再起動します。
-
-## 接続
-
-`http://127.0.0.1:18890`またはVercelのWeb画面を開き、PC側の接続先URLとアクセスキーを入力します。通常はアクセスキーをブラウザのsessionStorageに保持します。「この端末で接続情報を覚える」を選ぶとlocalStorageに保存して次回も自動接続します。Web版の接続先URLは自動取得します。詳しくは[接続ガイド](CONNECTION.md)を参照してください。ページへの再接続は自動で行いますが、送信結果が不明なメッセージは自動再送しません。
-
-Cloudflare Quick Tunnelを使う場合は、公式の`cloudflared`を`~/.local/bin/cloudflared`に設置し、`node scripts/tunnel.mjs`を起動します。`.local/接続情報.txt`と`.local/Gontaを開く.url`に最新情報が出力されます。これらは秘密情報を含むため共有・コミットしないでください。
-
-**Quick Tunnelは試用向けで、再起動時にURLが変わり、可用性の保証もありません。** LINEのWebhook URLは自動更新されますが、Webは最新の接続情報を再入力する必要があります。恒久運用では独自ドメインを使った名前付きTunnelに切り替えてください。PCが停止・スリープ中は会話できません。
+secretのJSONは `{"MEMO_TOKEN_HASH":"SHA256(SHA256('gonta.memo.v1:' + 接続キー)の小文字hex文字列)の小文字hex文字列"}`。実際の値や接続キーはコミットしないでください。
 
 ## LINE
 
 1. 専用のLINE公式アカウントを作成し、Messaging APIを有効にします。
 2. チャネルシークレット・アクセストークンをPC側設定に保存します。
-3. Webhookを`https://your-tunnel/line/webhook`に設定し、「Webhookの利用」を有効にします。既定の応答メッセージは無効にします。
-4. Webで会話を選び「LINEとつなぐ」で連携コードを発行します。
-5. LINEボットに連携コードを送ります。コードは10分間・1回限りです。
+3. Webhookを `https://your-tunnel/line/webhook` に設定し、「Webhookの利用」を有効にします。既定の応答メッセージは無効にします。
+4. Webで「LINEとつなぐ」から連携コードを発行し、LINEボットに送ります。コードは10分間・1回限りです。
 
-`/会話`で会話一覧、`/切替 1`で対象変更、`/新規`で新しい会話を開始します。LINEは個人トークのテキストのみ対応します。画像・音声・グループトークは対象外です。
+連携後はそのまま送ると、Webと同じ1つの会話の続きになります。個人トークのテキストのみ対応します。Webhookは署名を検証し、イベントIDをSQLiteに保存して再送を重複排除します。処理を始めたイベントはクラッシュ後に自動実行しません。45秒以内に返答が完成しないときは「考え中」と返し、完成後にプッシュメッセージで送ります。
 
-Webhookは署名を検証し、イベントIDをSQLiteに保存して再送を重複排除します。処理を始めたイベントはクラッシュ後に自動実行しません。45秒を超える応答はWebで確認する案内をLINEに返します。LINE返信が失敗したイベントは`line_events`に`failed`で記録されます。手動再送はOpenClaw履歴を確認してから行ってください。
+## 旧構成（OpenClaw）からの切り替え
+
+新構成の動作確認後に、旧構成の自動起動とWSL内のサービスを止めます。アンインストールやデータ削除はしません。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\retire-openclaw.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-windows-startup.ps1
+```
+
+旧構成に戻す場合はWSL内で `systemctl --user enable --now openclaw-gateway.service gonta.service gonta-tunnel.service` を実行し、`scripts/legacy/` のスクリプトで旧タスクを登録し直します。
 
 ## セキュリティと範囲
 
-未認証では会話一覧・履歴・送信APIを利用できません。WebSocketは許可Originを検証し、HMACチャレンジで認証します。LINEは署名と、Webで発行したコードによるユーザー連携の両方が必要です。OpenClawの設定変更・シェル実行・管理APIをブリッジから直接呼び出す機能はありません。ただし**認証済みユーザーの会話は通常のOpenClawの権限で実行されます**。アクセスキーと自動接続リンクを他人に渡さないでください。
+未認証では履歴・送信APIを利用できません。WebSocketは許可Originを検証し、HMACチャレンジで認証します。LINEは署名と、Webで発行したコードによるユーザー連携の両方が必要です。ローカル専用入口はループバックのみで、トンネルを通さず、合言葉ファイルが必要です。
 
-TLSはCloudflareで終端します。通信はCloudflareを経由し、LINE利用時はLINEにも送受信内容が渡ります。VercelとGitHubにはアプリのソースコードだけを置き、トークン・会話履歴を置きません。
+**認証済みユーザーの発言は、常駐するClaude Codeの権限（PowerShell実行・ファイル操作）で実行されます。** アクセスキーと自動接続リンクを他人に渡さないでください。TLSはCloudflareで終端します。LINE利用時はLINEにも送受信内容が渡ります。VercelとGitHubにはアプリのソースコードだけを置き、トークン・会話履歴・人格フォルダを置きません。
 
-対応する会話はmain/codexエージェントのDiscord会話、メイン会話、Gontaで作成した会話です。cron/ACPなどの内部セッションは対象外です。Webでは直近100件のテキスト履歴を表示します。添付ファイル、承認UI、画像表示は未対応です。OpenClawが実行承認を要求する操作は既存のControl UI等で承認してください。
+Discordの受け口は旧構成とともに停止しています。添付ファイル、画像表示、Claude Codeの確認ダイアログは未対応です。
 
 ## 検証・デプロイ
 
@@ -91,6 +156,6 @@ npm test
 npm run build
 ```
 
-Vercelの出力は`dist/`。秘密情報を環境変数に登録する必要はありません。`allowedOrigins`には実際の本番URLを明示して再起動してください。
+日記の材料集めの検証は人格フォルダで `python -m unittest test_claude_diary_context test_diary_context`（`scripts` 内）。Vercelの出力は `dist/`。秘密情報を環境変数に登録する必要はありません。
 
-参考: [OpenClawクライアント](https://docs.openclaw.ai/gateway/clients)、[LINE Messaging API](https://developers.line.biz/ja/docs/messaging-api/)、[Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/)
+参考: [Claude Code ヘッドレス実行](https://code.claude.com/docs/en/headless)、[Claude Code 利用規約の整理](https://code.claude.com/docs/en/legal-and-compliance)、[LINE Messaging API](https://developers.line.biz/ja/docs/messaging-api/)、[Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/)

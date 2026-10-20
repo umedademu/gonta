@@ -1,31 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DiaryMonitor,diaryActivity,isDiaryUpdate} from '../relay/diary.mjs';
-
-const job=(id,running=true)=>({id,name:'日記更新（4時間おき）',payload:{message:'非公開の指示'},state:running?{runningAtMs:Date.now()}:{lastRunStatus:'ok'}});
-test('diary activity represents running writers only and never exposes cron content',()=>{
- assert.deepEqual(diaryActivity([job('a')]),{kind:'diary'});
- assert.equal(diaryActivity([job('a',false)]),null);
- assert.equal(diaryActivity([{...job('a'),name:'日記を検索'}]),null);
- assert.equal(diaryActivity([{...job('a'),name:'workspace-auto-push'}]),null);
- assert.ok(isDiaryUpdate({name:'daily',payload:{message:'Append today’s daily note'}}));
- assert.deepEqual(diaryActivity([job('a',false),job('b')]),{kind:'diary'},'overlapping job still running');
- assert.equal(diaryActivity([{...job('a'),state:{runningAtMs:null,nextRunAtMs:Date.now()}}]),null);
+import {diaryDate,diaryInstruction,jstParts,messageLabel} from '../relay/diary.mjs';
+test('the nightly run targets the diary day that ended at 04:00 JST, even when late',()=>{
+ assert.equal(diaryDate(new Date('2026-10-20T18:00:00Z')),'2026-10-20'); // 03:00 JST on the 21st
+ assert.equal(diaryDate(new Date('2026-10-21T01:00:00Z')),'2026-10-20'); // woke late, 10:00 JST
+ assert.equal(diaryDate(new Date('2026-10-20T14:59:00Z')),'2026-10-19'); // 23:59 JST on the 20th
 });
-test('monitor restores running status on connect, paginates, and clears on finish or failed read',async()=>{
- let changes=0,running=true,failed=false;
- const monitor=new DiaryMonitor(async(method,p)=>{
-  assert.equal(method,'cron.list');if(failed)throw Error('offline');
-  return p.offset===0?{jobs:[],hasMore:true,nextOffset:200}:{jobs:[job('secret',running)],hasMore:false};
- },()=>changes++);
- monitor.active=true;await monitor.refresh();assert.deepEqual(monitor.activity,{kind:'diary'});
- await monitor.refresh();assert.equal(changes,1,'unchanged poll does not broadcast');
- running=false;await monitor.refresh();assert.equal(monitor.activity,null);
- running=true;await monitor.refresh();failed=true;await monitor.refresh();assert.equal(monitor.activity,null);
- monitor.stop();
+test('instructions carry the target date and time, and reject bad dates',()=>{
+ const text=diaryInstruction('2026-10-20',new Date('2026-10-20T18:05:00Z'));
+ assert.match(text,/^\[日記の定時実行 2026-10-21 03:05\]/);
+ assert.match(text,/対象日: 2026-10-20/);
+ assert.match(text,/DIARY_TASK\.md/);
+ assert.throws(()=>diaryInstruction('20261020'));
+ assert.deepEqual(jstParts(new Date('2026-12-31T15:00:00Z')),{date:'2027-01-01',time:'00:00'});
 });
-test('stale in-flight snapshot cannot restore activity after disconnect',async()=>{
- let resolve;const monitor=new DiaryMonitor(()=>new Promise(r=>resolve=r),()=>{});
- monitor.active=true;const pending=monitor.refresh();monitor.stop();resolve({jobs:[job('a')]});await pending;
- assert.equal(monitor.activity,null);
+test('message labels name the source and the JST time without leaking anything else',()=>{
+ assert.equal(messageLabel('line',new Date('2026-10-20T12:30:00Z')),'[LINE 2026-10-20 21:30]');
+ assert.equal(messageLabel('web',new Date('2026-10-20T12:30:00Z')),'[Web 2026-10-20 21:30]');
+ assert.equal(messageLabel('local',new Date('2026-10-20T12:30:00Z')),'[PC 2026-10-20 21:30]');
 });
