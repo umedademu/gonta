@@ -25,6 +25,12 @@ Write-Host '1. このあとブラウザが開きます。Claude の画面で「�
 Write-Host '2. この黒い画面に「sk-ant-oat」で始まる長い文字列が表示されます。それをコピーしてください。'
 Write-Host '   （マウスで文字列をなぞって選び、右クリックするとコピーできます）'
 Write-Host ''
+Write-Host 'うまくいかないとき：' -ForegroundColor Yellow
+Write-Host '  ブラウザに「ブラウザを確認できませんでした」と出たら、拡張機能が邪魔をしています。'
+Write-Host '  この黒い画面に出ている https://claude.ai/... のURLをなぞってコピーし（c キーでコピーできる場合もあります）、'
+Write-Host '  Chrome のシークレットウィンドウ（Ctrl + Shift + N）か Edge に貼り付けて開いてください。'
+Write-Host '  ブラウザに確認コードが表示されたら、それをこの黒い画面に貼り付けて Enter を押します。'
+Write-Host ''
 & $claude setup-token
 if ($LASTEXITCODE -ne 0) { throw ('claude setup-token が終了コード {0} で止まりました。もう一度実行してください。' -f $LASTEXITCODE) }
 
