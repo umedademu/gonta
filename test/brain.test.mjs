@@ -5,7 +5,7 @@ import {PassThrough} from 'node:stream';
 import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {AUTH_MESSAGE,Brain,claudeArguments,cleanEnvironment} from '../relay/brain.mjs';
+import {AUTH_MESSAGE,Brain,claudeArguments,cleanEnvironment,readTokenInfo} from '../relay/brain.mjs';
 
 // A fake `claude` child: whatever the test scripts on stdout, the Brain must parse.
 function fakeSpawn(){
@@ -140,4 +140,11 @@ test('reload restarts an idle brain at once and a busy one after its turn',async
  calls[1].child.emitLine({type:'result',subtype:'success',is_error:false,result:'ok'});await turn;
  assert.equal(calls.length,3);assert.ok(brain.ready);
  brain.stop();
+});
+
+test('token dates written by Windows PowerShell (UTF-8 with BOM) are readable',()=>{
+ const dir=directory();
+ writeFileSync(path.join(dir,'claude-oauth-token.json'),'\uFEFF{"created":"2026-11-03T22:27:23+09:00","expires":"2027-11-03T22:27:23+09:00"}','utf8');
+ assert.equal(readTokenInfo(dir).expires,'2027-11-03T22:27:23+09:00');
+ assert.equal(readTokenInfo(path.join(dir,'missing')),null);
 });

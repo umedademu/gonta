@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,readdirSync,existsSync,writeFileSync,chmodSync} from 'node:fs';
 import {createHmac,randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
-import {Brain} from './brain.mjs';
+import {Brain,readTokenInfo} from './brain.mjs';
 import {Discord,addressed,allowedChannel,cleanContent} from './discord.mjs';
 import {ActivityTracker} from './activity.mjs';
 import {Store} from './store.mjs';
@@ -42,7 +42,7 @@ const broadcast=obj=>{for(const ws of peers)send(ws,obj);};
 const broadcastConversation=obj=>{for(const ws of peers)if(ws.session===conversation)send(ws,obj);};
 const visibleRun=()=>{const b=brain.busy;return b&&!b.hidden?{runId:b.runId,text:b.text}:null;};
 // The one-year token's dates (no secret) are written next to it by set-claude-token.ps1.
-function tokenInfo(){try{return JSON.parse(readFileSync(path.join(directory,'claude-oauth-token.json'),'utf8'));}catch{return null;}}
+const tokenInfo=()=>readTokenInfo(directory);
 function info(){
  const b=brain.busy;
  return{gateway:brain.ready,auth:brain.auth.ok?'ok':'expired',authSource:brain.authSource,tokenExpires:brain.authSource==='token'?tokenInfo()?.expires||null:null,backgroundActivity:b?.hidden?{kind:'diary'}:null,version:brain.version?`Claude Code ${brain.version}`:'Claude Code',model:brain.modelName||brain.model,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts(),discord:discord?(discord.ready?'connected':'offline'):'disabled'};

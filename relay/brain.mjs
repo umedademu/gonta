@@ -51,6 +51,8 @@ export function loadOAuthToken(directory,log=console){
  }catch(e){log.error('Claude token could not be read:',String(e.message).split('\n')[0]);}
  return null;
 }
+// Dates of the stored token (no secret). Windows PowerShell 5.1 writes UTF-8 with a BOM.
+export function readTokenInfo(directory){try{return JSON.parse(readFileSync(path.join(directory,'claude-oauth-token.json'),'utf8').replace(/^﻿/,''));}catch{return null;}}
 export const AUTH_FAILURE=/Failed to authenticate|OAuth (session|token)|Login expired|run \/login|Not logged in|authentication_error|Invalid bearer token|invalid x-api-key/i;
 export const AUTH_MESSAGE='PCのClaudeのログイン期限が切れたため、返事ができません。PCで gonta フォルダの scripts\\update-claude-login.cmd を実行すると直ります。';
 
