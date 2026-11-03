@@ -10,7 +10,8 @@
   - `relay/server.mjs` — WebSocket API、LINE Webhook、Discord受け口、メモ帳APIの転送、ローカル専用入口。
   - `relay/discord.mjs` — Discordのボット接続（受信はGateway、返信はREST）。
 - `scripts/tunnel.mjs` — Cloudflare Quick Tunnelの接続先管理。LINE WebhookのURLを追従させます。
-- `scripts/local.mjs` — PC内からの操作（状態確認・日記の実行・テスト送信）。
+- `scripts/local.mjs` — PC内からの操作（状態確認・日記の実行・テスト送信・頭脳の再起動）。
+- `scripts/update-claude-login.cmd` / `scripts/set-claude-token.ps1` — 頭脳用の1年有効なログイン用の合言葉を作って保存する（ダブルクリックで実行）。
 - `scripts/start-gonta.ps1` / `scripts/install-windows-startup.ps1` — Windowsログイン時の自動起動。
 - `scripts/retire-openclaw.ps1` — 旧構成（WSLのOpenClaw）の停止。
 - `scripts/legacy/` — 旧構成の起動スクリプト（参考・復旧用）。
@@ -27,9 +28,25 @@
 - Web・LINE・Discordの発言は同じ1つの会話に順番に流します。同時実行はせず、待ち行列で1ターンずつ処理します。
 - 権限は `--permission-mode acceptEdits`、許可ツールはPowerShell・Bash・ファイルの読み書き検索・Web取得・スキル。`--permission-prompts none` なので、許可外の操作は確認を待たずに拒否されます。サブエージェント（Agent）は使いません。
 - 会話IDは `C:\Users\USER\.gonta\claude-session.json` に保存し、プロセスが落ちたときや中継役の再起動時は `--resume` で同じ会話を復帰します。復帰できない場合だけ新しい会話を始めます。
-- `--bare` は付けません（サブスクのログインを使うため）。`ANTHROPIC_API_KEY` は設定せず、親プロセスから引き継いだClaude関連の環境変数も渡しません。
+- `--bare` は付けません（サブスクのログインを使うため）。`ANTHROPIC_API_KEY` は設定せず、親プロセスから引き継いだClaude関連の環境変数も渡しません。ログインは、保存済みの1年有効な合言葉（`claude setup-token`）があればそれを、なければPCの通常のログインを使います（次の節）。
 - モデルは `config.json` の `claude.model`（既定 `sonnet`）。利用枠はコーディング作業と共有なので、モデルを呼ぶのは人の発言と1日1回の日記だけです。定期的な見回りや通知はしません。
 - 各発言には `[Web 2026-10-20 21:30]` や `[Discord #何でも 梅田 2026-10-20 21:30]` のような送信元と日本時間の前置きを付けて渡します。ゴンタはこれで現在時刻を知ります。
+
+## ログインの期限（大事）
+
+PCの通常のログイン（`claude auth login` や `/login`）には期限があり、このPCでは14日で切れました（2026-10-20のログインが2026-11-03 15:24に失効）。対話画面なら起動時に警告が出ますが、常駐する頭脳には出ず、期限が切れると自分では更新できません。そのため、無人運用には公式の[`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token)で作る1年有効な合言葉を使います。課金は同じClaudeサブスクリプションで、APIキーではありません。
+
+更新手順（1年ごと、またはログイン切れの案内が出たとき）:
+
+1. このPCで `scripts\update-claude-login.cmd` をダブルクリックします。
+2. 開いたブラウザでClaudeの「承認（Authorize）」を押します。
+3. 黒い画面に表示された `sk-ant-oat` で始まる文字列をコピーし、同じ画面の「合言葉」に貼り付けてEnterを押します。
+
+合言葉はこのWindowsユーザーだけが読めるように暗号化（DPAPI）して `C:\Users\USER\.gonta\claude-oauth-token.dpapi` に保存され、画面・ログ・GitHubには残りません。日付だけを `claude-oauth-token.json` に記録し、期限の30日前・7日前・前日・当日にLINEでお知らせします。保存後はスクリプトが頭脳を再起動して新しい合言葉を読み込ませます。
+
+ログインが切れているとき、ゴンタは英語のエラーではなく「PCのClaudeのログイン期限が切れたため、返事ができません」と返します。ログインし直した後の最初の発言で頭脳を自動的に起動し直すので、中継役の再起動は不要です。手動で読み直させるときは `node scripts\local.mjs restart`。どちらのログインで動いているか、合言葉の期限はいつかは `node scripts\local.mjs status` の `authSource`・`tokenExpires` で確認できます。
+
+合言葉をやめて通常のログインに戻すときは、`claude-oauth-token.dpapi` と `claude-oauth-token.json` を消して `node scripts\local.mjs restart` を実行します。
 
 ## 人格フォルダ（`C:\Users\USER\gonta-brain`）
 
@@ -65,7 +82,7 @@ Desktop直下に置かないのは、`C:\Users\USER\Desktop\CLAUDE.md`（開発�
 
 `discord` を省くとDiscordの受け口は起動しません。`claude.model` は `sonnet` / `opus` / `fable` などの別名か正式名。`claude.effort` で思考の深さ、`claude.workspace` で人格フォルダの場所を変えられます。`line` を使わない場合は空のオブジェクトにします。`allowedOrigins` は接続のたびに読み直すので、トンネルのURLが変わっても中継役の再起動は不要です。その他の変更後は中継役を再起動します。
 
-同じフォルダの `gonta.sqlite` に会話ログ（Web履歴用・日記の材料）、LINE連携、Webhook受信状態を保存します。`local-token` はローカル専用入口の合言葉、`discovery-private.pem` は接続先案内の署名鍵です。これらは共有・コミットしないでください。
+同じフォルダの `gonta.sqlite` に会話ログ（Web履歴用・日記の材料）、LINE連携、Webhook受信状態を保存します。`claude-oauth-token.dpapi` は頭脳用の合言葉（暗号化済み）です。`local-token` はローカル専用入口の合言葉、`discovery-private.pem` は接続先案内の署名鍵です。これらは共有・コミットしないでください。
 
 ## ローカル起動手順
 

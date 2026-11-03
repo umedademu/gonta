@@ -2,6 +2,7 @@
 //   node scripts/local.mjs status
 //   node scripts/local.mjs diary [YYYY-MM-DD]   nightly diary (default: yesterday)
 //   node scripts/local.mjs say <text>           one message as if typed on the PC
+//   node scripts/local.mjs restart              restart the brain so a new login/token is read
 import {readFileSync,appendFileSync,mkdirSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,6 +27,7 @@ try{
   log(`diary ${r.ok?'ok':'failed'} ${r.date} ${(r.error||'')} ${(r.text||'').replace(/\s+/g,' ').slice(0,500)}`);
   console.log(JSON.stringify(r,null,2));if(!r.ok)process.exitCode=1;
  }
+ else if(command==='restart'){const r=await call('POST','/restart',{});console.log(r.when==='now'?'ゴンタの頭脳を再起動しました。':'いまの返答が終わったら再起動します。');}
  else if(command==='say'){const r=await call('POST','/say',{text:rest.join(' ')});console.log(r.text||r.error);if(!r.ok)process.exitCode=1;}
- else{console.error('usage: node scripts/local.mjs status | diary [YYYY-MM-DD] | say <text>');process.exitCode=2;}
+ else{console.error('usage: node scripts/local.mjs status | diary [YYYY-MM-DD] | say <text> | restart');process.exitCode=2;}
 }catch(e){log(`${command} error ${e.message}`);console.error(e.message);process.exitCode=1;}

@@ -14,6 +14,7 @@ export class Store {
  consume(code,user){const r=this.db.prepare('SELECT * FROM pairing WHERE code=? AND expires>?').get(code,Date.now());if(!r)return false;this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM pairing WHERE code=?').run(code);this.bind(user,r.session_key);this.db.exec('COMMIT');return true;}catch(e){this.db.exec('ROLLBACK');throw e;}}
  bind(user,key){this.db.prepare('INSERT INTO line_users VALUES(?,?) ON CONFLICT(id) DO UPDATE SET session_key=excluded.session_key').run(user,key);}
  user(id){return this.db.prepare('SELECT session_key FROM line_users WHERE id=?').get(id)?.session_key;}
+ lineUsers(){return this.db.prepare('SELECT id FROM line_users').all().map(r=>r.id);}
  enqueue(e){return this.db.prepare('INSERT OR IGNORE INTO line_events(id,body,created) VALUES(?,?,?)').run(e.webhookEventId,JSON.stringify(e),Date.now()).changes>0;}
  next(){return this.db.prepare("SELECT * FROM line_events WHERE status='pending' ORDER BY created LIMIT 1").get();}
  status(id,status,error=null){this.db.prepare('UPDATE line_events SET status=?,error=? WHERE id=?').run(status,error,id);}

@@ -5,7 +5,7 @@ import {PassThrough} from 'node:stream';
 import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {Brain,claudeArguments,cleanEnvironment} from '../relay/brain.mjs';
+import {AUTH_MESSAGE,Brain,claudeArguments,cleanEnvironment} from '../relay/brain.mjs';
 
 // A fake `claude` child: whatever the test scripts on stdout, the Brain must parse.
 function fakeSpawn(){
@@ -98,5 +98,46 @@ test('abort sends an interrupt and the result is reported as aborted with the pa
  child.emitLine({type:'result',subtype:'success',is_error:false,result:'途中'});
  await assert.rejects(turn,e=>e.state==='aborted'&&e.text==='途中');
  assert.equal(states.at(-1),'aborted');
+ brain.stop();
+});
+
+test('only an explicitly loaded one-year token reaches the child, never an inherited one',()=>{
+ const inherited=cleanEnvironment({PATH:'x',CLAUDE_CODE_OAUTH_TOKEN:'from-the-desktop-app'});
+ assert.equal(inherited.CLAUDE_CODE_OAUTH_TOKEN,undefined);
+ assert.equal(cleanEnvironment({PATH:'x'},'sk-ant-oat01-test').CLAUDE_CODE_OAUTH_TOKEN,'sk-ant-oat01-test');
+});
+
+test('an expired login gives a plain message, and the next message starts a fresh process that reads the new token',async()=>{
+ const {spawn,calls}=fakeSpawn();let token=null;
+ const brain=new Brain({cwd:'C:\brain',directory:directory(),command:'fake',spawnImpl:spawn,log:{log(){},error(){}},tokenLoader:()=>token});
+ const auth=[],turns=[];brain.on('auth',a=>auth.push(a.ok));brain.on('turn',t=>turns.push(t));
+ brain.start();assert.equal(brain.authSource,'login');
+ const first=brain.send({text:'こんにちは',runId:'r1'});await tick();
+ const failure='Failed to authenticate: OAuth session expired and could not be refreshed';
+ calls[0].child.emitLine({type:'assistant',error:'authentication_failed',message:{content:[{type:'text',text:failure}]}});
+ calls[0].child.emitLine({type:'result',subtype:'success',is_error:true,result:failure});
+ await assert.rejects(first,e=>e.message===AUTH_MESSAGE&&e.text==='');
+ assert.ok(turns.every(t=>!String(t.text).includes('Failed to authenticate')),'the English error is never shown as Gonta\'s words');
+ assert.equal(brain.auth.ok,false);assert.deepEqual(auth,[false]);assert.equal(calls.length,1);
+ token='sk-ant-oat01-'+'x'.repeat(40);
+ const second=brain.send({text:'もう一度',runId:'r2'});await tick();
+ assert.equal(calls.length,2);assert.equal(calls[1].options.env.CLAUDE_CODE_OAUTH_TOKEN,token);assert.equal(brain.authSource,'token');
+ assert.equal(calls[1].child.written[0].message.content,'もう一度');
+ calls[1].child.emitLine({type:'result',subtype:'success',is_error:false,result:'はい'});
+ assert.deepEqual(await second,{text:'はい'});assert.equal(brain.auth.ok,true);assert.deepEqual(auth,[false,true]);
+ const third=brain.send({text:'三つ目',runId:'r3'});await tick();
+ assert.equal(calls.length,2,'a working login does not restart the process');
+ calls[1].child.emitLine({type:'result',subtype:'success',is_error:false,result:'了解'});await third;
+ brain.stop();
+});
+
+test('reload restarts an idle brain at once and a busy one after its turn',async()=>{
+ const {spawn,calls}=fakeSpawn();
+ const brain=new Brain({cwd:'C:\brain',directory:directory(),command:'fake',spawnImpl:spawn,log:{log(){},error(){}},tokenLoader:()=>null});
+ brain.start();assert.equal(brain.reload(),'now');assert.equal(calls.length,2);assert.ok(brain.ready);
+ const turn=brain.send({text:'x',runId:'r1'});await tick();
+ assert.equal(brain.reload(),'after-turn');assert.equal(calls.length,2);
+ calls[1].child.emitLine({type:'result',subtype:'success',is_error:false,result:'ok'});await turn;
+ assert.equal(calls.length,3);assert.ok(brain.ready);
  brain.stop();
 });

@@ -41,9 +41,11 @@ const send=(ws,obj)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o
 const broadcast=obj=>{for(const ws of peers)send(ws,obj);};
 const broadcastConversation=obj=>{for(const ws of peers)if(ws.session===conversation)send(ws,obj);};
 const visibleRun=()=>{const b=brain.busy;return b&&!b.hidden?{runId:b.runId,text:b.text}:null;};
+// The one-year token's dates (no secret) are written next to it by set-claude-token.ps1.
+function tokenInfo(){try{return JSON.parse(readFileSync(path.join(directory,'claude-oauth-token.json'),'utf8'));}catch{return null;}}
 function info(){
  const b=brain.busy;
- return{gateway:brain.ready,backgroundActivity:b?.hidden?{kind:'diary'}:null,version:brain.version?`Claude Code ${brain.version}`:'Claude Code',model:brain.modelName||brain.model,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts(),discord:discord?(discord.ready?'connected':'offline'):'disabled'};
+ return{gateway:brain.ready,auth:brain.auth.ok?'ok':'expired',authSource:brain.authSource,tokenExpires:brain.authSource==='token'?tokenInfo()?.expires||null:null,backgroundActivity:b?.hidden?{kind:'diary'}:null,version:brain.version?`Claude Code ${brain.version}`:'Claude Code',model:brain.modelName||brain.model,line:!!(config.line?.secret&&config.line?.token),lineBotId:config.line?.botId||null,lineEvents:store.counts(),discord:discord?(discord.ready?'connected':'offline'):'disabled'};
 }
 function sessions(){return[{key:conversation,name:'#何でも',channel:'web',updatedAt:store.lastMessageAt(),hasActiveRun:!!visibleRun()}];}
 function history(key){
@@ -160,6 +162,7 @@ brain.on('turn',t=>{
  broadcastConversation({type:'chat',sessionKey:conversation,runId:t.runId,state:t.state,text:t.text,error:t.error});
 });
 brain.on('tool',e=>{if(e.hidden)return;const activity=activities.event(e);if(activity!==undefined)broadcastConversation({type:'activity',sessionKey:conversation,activity});});
+brain.on('auth',()=>broadcast({type:'status',status:info()}));
 brain.on('ready',()=>{console.log('Claude brain ready');broadcast({type:'status',status:info()});void drain();});
 brain.on('offline',()=>{const change=activities.clear();if(change!==undefined)broadcastConversation({type:'activity',sessionKey:conversation,activity:null});broadcast({type:'status',status:info()});});
 
@@ -224,6 +227,18 @@ async function drain(){
   }catch(e){store.status(row.id,'failed',e.message);console.error('LINE event failed:',row.id,e.message);}
  }}finally{draining=false;}
 }
+// Remind on LINE 30, 7 and 1 days before the one-year token runs out, and when it has.
+// Only a fixed message is sent; the model is not called.
+function remindToken(){
+ const t=tokenInfo();if(brain.authSource!=='token'||!t?.expires||!config.line?.token)return;
+ const days=Math.ceil((Date.parse(t.expires)-Date.now())/86400000);
+ const step=[0,1,7,30].find(d=>days<=d);if(step===undefined)return;
+ const key='tokenReminder:'+t.expires,last=store.get(key);if(typeof last==='number'&&last<=step)return;
+ store.set(key,step);
+ const text=days>0?`ゴンタのログイン用の合言葉は、あと${days}日で期限が切れます。PCで gonta フォルダの scripts\\update-claude-login.cmd を実行して更新してください。`:'ゴンタのログイン用の合言葉の期限が切れました。PCで gonta フォルダの scripts\\update-claude-login.cmd を実行して更新してください。';
+ for(const user of store.lineUsers())linePush(user,text).catch(e=>console.error('Token reminder:',e.message));
+}
+setTimeout(remindToken,120000).unref();setInterval(remindToken,6*3600000).unref();
 // Local-only entrance for the PC itself: the nightly diary task and manual checks.
 // It is bound to loopback on a port the tunnel never forwards and needs the token file.
 const local=http.createServer(async(req,res)=>{
@@ -235,6 +250,7 @@ const local=http.createServer(async(req,res)=>{
   const raw=await readBody(req,res,64*1024);if(raw===null)return;
   const body=raw.length?JSON.parse(raw):{};
   const wait=body.wait!==false;
+  if(url.pathname==='/restart')return json(res,200,{ok:true,when:brain.reload()});
   if(url.pathname==='/diary'){
    const date=body.date||diaryDate();
    const runId='diary:'+date+':'+randomUUID();
