@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,readdirSync,existsSync,writeFileSync,chmodSync} from 'node:fs';
 import {createHmac,randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
-import {Brain,readTokenInfo} from './brain.mjs';
+import {Brain,TOKEN_FILE,readTokenInfo} from './brain.mjs';
 import {Discord,addressed,allowedChannel,cleanContent} from './discord.mjs';
 import {ActivityTracker} from './activity.mjs';
 import {Store} from './store.mjs';
@@ -28,7 +28,8 @@ const localToken=readFileSync(localTokenFile,'utf8').trim();
 const conversation=config.conversationKey||'agent:main:discord:channel:1472809918645010535';
 const workspace=process.env.GONTA_BRAIN||config.claude?.workspace||path.join(os.homedir(),'gonta-brain');
 if(!existsSync(path.join(workspace,'CLAUDE.md')))throw Error(`Gonta's personality folder is missing: ${workspace}`);
-const brain=new Brain({cwd:workspace,directory,model:process.env.GONTA_MODEL||config.claude?.model||'sonnet',effort:config.claude?.effort,command:config.claude?.command});
+// The brain answers on the API credit (Agent SDK) and falls back to the subscription; see brain.mjs.
+const brain=new Brain({cwd:workspace,directory,model:process.env.GONTA_MODEL||config.claude?.model||'sonnet',effort:config.claude?.effort,command:config.claude?.command,api:config.claude?.api!==false,monthlyUsd:config.claude?.apiMonthlyUsd,spendFile:config.claude?.spendFile});
 const activities=new ActivityTracker();
 const store=new Store(path.join(directory,'gonta.sqlite'));
 try{chmodSync(path.join(directory,'gonta.sqlite'),0o600);}catch{}
@@ -227,10 +228,11 @@ async function drain(){
   }catch(e){store.status(row.id,'failed',e.message);console.error('LINE event failed:',row.id,e.message);}
  }}finally{draining=false;}
 }
-// Remind on LINE 30, 7 and 1 days before the one-year token runs out, and when it has.
+// Remind on LINE 30, 7 and 1 days before the one-year token runs out, and when it has. The token
+// is also the fallback while the API answers, so this does not depend on the current route.
 // Only a fixed message is sent; the model is not called.
 function remindToken(){
- const t=tokenInfo();if(brain.authSource!=='token'||!t?.expires||!config.line?.token)return;
+ const t=tokenInfo();if(!existsSync(path.join(directory,TOKEN_FILE))||!t?.expires||!config.line?.token)return;
  const days=Math.ceil((Date.parse(t.expires)-Date.now())/86400000);
  const step=[0,1,7,30].find(d=>days<=d);if(step===undefined)return;
  const key='tokenReminder:'+t.expires,last=store.get(key);if(typeof last==='number'&&last<=step)return;
@@ -245,7 +247,7 @@ const local=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://localhost');
   if(!equal(req.headers['x-gonta-token']||'',localToken))return json(res,401,{error:'Unauthorized'});
-  if(url.pathname==='/status'&&req.method==='GET')return json(res,200,{...info(),busy:brain.busy&&{runId:brain.busy.runId,source:brain.busy.source,hidden:brain.busy.hidden,started:brain.busy.started},queued:brain.queue.length,session:brain.sessionId||null,workspace});
+  if(url.pathname==='/status'&&req.method==='GET')return json(res,200,{...info(),route:brain.route,routeReason:brain.routeReason||null,apiThisMonth:brain.apiMonth,busy:brain.busy&&{runId:brain.busy.runId,source:brain.busy.source,hidden:brain.busy.hidden,started:brain.busy.started},queued:brain.queue.length,session:brain.sessionId||null,workspace});
   if(req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   const raw=await readBody(req,res,64*1024);if(raw===null)return;
   const body=raw.length?JSON.parse(raw):{};
